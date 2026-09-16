@@ -1484,7 +1484,20 @@ func (m *Model) View(height, width int) string {
 	// lifecycle adds complexity; reply flushes and hit rects ARE captured
 	// in the per-reply loop below.
 	parentIsSelected := m.selected == parentSelected
-	parentContent, _, _, parentHeader, parentHeaderBudget := m.renderThreadMessage(m.parent, width, m.userNames, m.channelNames, parentIsSelected)
+	// Replies only get a day divider when their day differs from the
+	// parent's, so the parent header carries its own date; otherwise a
+	// thread whose first replies share the parent's day shows no date.
+	parentMsg := m.parent
+	if !parentIsSelected {
+		if date := messages.DateFromTS(parentMsg.TS); date != "" {
+			label := messages.FormatShortDate(date)
+			if parentMsg.Timestamp != "" {
+				label += ", " + parentMsg.Timestamp
+			}
+			parentMsg.Timestamp = label
+		}
+	}
+	parentContent, _, _, parentHeader, parentHeaderBudget := m.renderThreadMessage(parentMsg, width, m.userNames, m.channelNames, parentIsSelected)
 	m.parentEntry = viewEntry{
 		linesPlain:       messages.PlainLines(parentContent),
 		height:           lipgloss.Height(parentContent),
