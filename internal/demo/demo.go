@@ -13,6 +13,10 @@ import (
 	"github.com/gammons/slk/internal/ui/workspace"
 )
 
+// connected is ui.ConnectionStateMsg's State: 0 connecting, 1 connected,
+// 2 disconnected.
+const connected = 1
+
 // Demo is one demo session: the World, the director playing the chosen
 // scenario, the avatars and the chart.
 type Demo struct {
@@ -101,7 +105,7 @@ func (d *Demo) StartupMsgs() []tea.Msg {
 			InitialActive: i == 0, LastChannelID: s.firstChannel,
 		})
 	}
-	return append(out, ui.ConnectionStateMsg{State: 1})
+	return append(out, ui.ConnectionStateMsg{State: connected})
 }
 
 // Run plays the scenario until ctx is cancelled, sending through send
