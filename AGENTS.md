@@ -45,6 +45,8 @@ internal/slack/edge/    edgeapi: conditional revalidation, server-side search
 internal/bootstrap/     startup fetch orchestration
 internal/cache/         SQLite cache (a cache, not a source of truth)
 internal/config/        TOML config
+internal/demo/          fake workspaces + services behind the hidden
+                        `slk --demo` flag; for recording README GIFs only
 ```
 
 **`wiki/Architecture.md` is stale by roughly 7× and describes a service layer

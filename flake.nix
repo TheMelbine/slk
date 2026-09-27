@@ -27,5 +27,9 @@
       in {
         packages.default = slk;
         packages.slk = slk;
+        # `nix develop`: Go plus vhs, for `make demo-gifs`.
+        devShells.default = pkgs.mkShell {
+          packages = [ pkgs.go_1_26 pkgs.vhs ];
+        };
       });
 }
