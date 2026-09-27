@@ -14,7 +14,10 @@ import (
 
 // deliverDemo feeds msg to app, then runs the commands it returns,
 // recursively, as Bubble Tea would. A command that does not answer
-// within 50ms is a timer (spinner, typing expiry) and is skipped.
+// within 500ms is a timer (typing expiry, loading timeout) and is
+// skipped; ui.SpinnerTickMsg is skipped explicitly (see runDemoCmd)
+// rather than by timeout, since it answers within 100ms and would
+// otherwise be delivered and re-armed recursively while loading.
 func deliverDemo(t *testing.T, app *ui.App, msg tea.Msg, depth int) {
 	t.Helper()
 	if msg == nil || depth > 12 {
@@ -39,8 +42,11 @@ func runDemoCmd(t *testing.T, app *ui.App, cmd tea.Cmd, depth int) {
 	go func() { done <- cmd() }()
 	select {
 	case msg := <-done:
+		if _, ok := msg.(ui.SpinnerTickMsg); ok {
+			return
+		}
 		deliverDemo(t, app, msg, depth)
-	case <-time.After(50 * time.Millisecond):
+	case <-time.After(500 * time.Millisecond):
 	}
 }
 
