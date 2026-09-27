@@ -41,7 +41,6 @@ import (
 	"github.com/gammons/slk/internal/ui/styles"
 	"github.com/gammons/slk/internal/ui/themeswitcher"
 	"github.com/gammons/slk/internal/ui/workspace"
-	versionpkg "github.com/gammons/slk/internal/version"
 	"github.com/gammons/slk/internal/wake"
 	"golang.design/x/clipboard"
 	"golang.org/x/term"
@@ -295,7 +294,6 @@ func run() error {
 	terminalOutput := imgpkg.NewFrameOutput(os.Stdout, sixelFrames)
 	imgpkg.KittyOutput = terminalOutput.SideChannel()
 	app.SetSixelFrameStore(sixelFrames)
-	app.SetHelpFooter(versionpkg.ModalFooter(version))
 	app.SetClipboardAvailable(clipboardOK)
 	app.SetClipboardWriter(newClipboardWriter(runtime.GOOS, os.Getenv, writeMacOSClipboard))
 	desktop := core.DesktopServiceFuncs{
@@ -319,14 +317,6 @@ func run() error {
 	// Connect to workspaces
 	ctx := context.Background()
 	tsFormat := cfg.Appearance.TimestampFormat
-
-	// Used by the optimistic instant-display path on send: the App
-	// mints a placeholder MessageItem before the chat.postMessage HTTP
-	// round-trip and needs a Timestamp string that renders identically
-	// to messages arriving through the normal load path.
-	app.SetNowTimestampFormatter(func() string {
-		return time.Now().Format(tsFormat)
-	})
 
 	// Initialize shared image cache (used for avatars and inline images).
 	imagesDir := filepath.Join(cacheDir, "images")
@@ -546,18 +536,18 @@ func run() error {
 	for _, it := range wsItems {
 		railTeamIDs = append(railTeamIDs, it.ID)
 	}
-	app.SetTypingEnabled(cfg.Animations.TypingIndicators)
-	app.SetSidebarStaleThreshold(time.Duration(cfg.Sidebar.HideInactiveAfterDays) * 24 * time.Hour)
-	app.SetMouseWheelLines(cfg.Appearance.MouseWheelLines)
-	app.SetColoredUsernames(cfg.Appearance.ColoredUsernames)
+	applyUISettings(app, uiSettings{
+		TimestampFormat:  tsFormat,
+		TypingIndicators: cfg.Animations.TypingIndicators,
+		StaleAfter:       time.Duration(cfg.Sidebar.HideInactiveAfterDays) * 24 * time.Hour,
+		MouseWheelLines:  cfg.Appearance.MouseWheelLines,
+		ColoredUsernames: cfg.Appearance.ColoredUsernames,
+		ThemeOverrides:   cfg.Theme,
+	})
 	app.SetEditorService(core.NewEditorService(editor.WriteDraft, editor.Edit, editor.TakeDraft))
 	if editor, ok := ui.ResolveEditor(cfg.Compose.Editor); ok {
 		app.SetComposeEditor(editor)
 	}
-
-	// Wire theme switcher
-	app.SetThemeItems(styles.ThemeNames())
-	app.SetThemeOverrides(cfg.Theme)
 
 	// AvatarFunc is wired below, after `router` is declared, because
 	// the lazy-fetch path needs router.Active().AvatarURLs to look up
