@@ -51,6 +51,24 @@ var replyTexts = []string{
 	"Love it :tada:",
 }
 
+// Scripted message texts and reaction emoji, hoisted so
+// TestFixtureEmojiExist can check the same values the rules below post
+// instead of literal copies that would drift if a scenario is edited.
+var (
+	heroMergedText    = "Merged :tada: The flaky `TestSessionRefresh` is gone from CI."
+	ciGreenText       = "CI on the plugin branch is green now :white_check_mark:"
+	dashboardsText    = "Dashboards look great. Nice rollout :clap:"
+	welcomeBackText   = "Welcome back! The 0.9.1 checklist is pinned in <#C1ANNOUNCE> :pushpin:"
+	rocketReaction    = "rocket"
+	tacoReaction      = "taco"
+	heartEyesReaction = "heart_eyes"
+)
+
+// scriptedTexts and scriptedEmoji are every literal text and reaction
+// name a scenario rule posts, for TestFixtureEmojiExist.
+var scriptedTexts = []string{heroMergedText, ciGreenText, dashboardsText, welcomeBackText}
+var scriptedEmoji = []string{rocketReaction, tacoReaction, heartEyesReaction}
+
 // answerTheUser: whenever the user sends something, someone starts typing
 // and then answers, in the thread if it was a thread reply.
 func answerTheUser() Rule {
@@ -67,12 +85,12 @@ func heroRules() []Rule {
 	return []Rule{
 		{When: on(EventChannelOpened, chEngineering), Once: true, Steps: []Step{
 			{After: 1500 * msec, Act: typing(uPriya, chEngineering)},
-			{After: 2500 * msec, Act: post(uPriya, chEngineering, "Merged :tada: The flaky `TestSessionRefresh` is gone from CI.")},
-			{After: 1200 * msec, Act: react(uSam, "rocket")},
+			{After: 2500 * msec, Act: post(uPriya, chEngineering, heroMergedText)},
+			{After: 1200 * msec, Act: react(uSam, rocketReaction)},
 		}},
 		answerTheUser(),
 		{When: on(EventStart, anyChannel), Once: true, Steps: []Step{
-			{After: 4 * time.Second, Act: post(uOmar, chContributors, "CI on the plugin branch is green now :white_check_mark:")},
+			{After: 4 * time.Second, Act: post(uOmar, chContributors, ciGreenText)},
 		}},
 	}
 }
@@ -82,7 +100,7 @@ func threadRules() []Rule {
 	return []Rule{
 		{When: on(EventThreadOpened, chDeploys), Once: true, Steps: []Step{
 			{After: 1500 * msec, Act: typing(uJonas, chDeploys)},
-			{After: 2 * time.Second, Act: reply(uJonas, "Dashboards look great. Nice rollout :clap:")},
+			{After: 2 * time.Second, Act: reply(uJonas, dashboardsText)},
 		}},
 		answerTheUser(),
 	}
@@ -92,9 +110,9 @@ func threadRules() []Rule {
 func reactionRules() []Rule {
 	return []Rule{
 		{When: on(EventChannelOpened, chGeneral), Once: true, Steps: []Step{
-			{After: 3 * time.Second, Act: reactLatest(uPriya, chGeneral, "taco")},
-			{After: 800 * msec, Act: reactLatest(uSam, chGeneral, "taco")},
-			{After: 800 * msec, Act: reactLatest(uTom, chGeneral, "heart_eyes")},
+			{After: 3 * time.Second, Act: reactLatest(uPriya, chGeneral, tacoReaction)},
+			{After: 800 * msec, Act: reactLatest(uSam, chGeneral, tacoReaction)},
+			{After: 800 * msec, Act: reactLatest(uTom, chGeneral, heartEyesReaction)},
 		}},
 	}
 }
@@ -104,11 +122,11 @@ func reactionRules() []Rule {
 func workspaceRules() []Rule {
 	return []Rule{
 		{When: on(EventStart, anyChannel), Once: true, Steps: []Step{
-			{After: 3 * time.Second, Act: post(uOmar, chContributors, "CI on the plugin branch is green now :white_check_mark:")},
+			{After: 3 * time.Second, Act: post(uOmar, chContributors, ciGreenText)},
 		}},
 		{When: func(ev Event) bool { return ev.Kind == EventWorkspaceSwitched && ev.TeamID == teamDriftwood }, Once: true, Steps: []Step{
 			{After: 1500 * msec, Act: typing(uRuth, chContributors)},
-			{After: 2 * time.Second, Act: post(uRuth, chContributors, "Welcome back! The 0.9.1 checklist is pinned in <#C1ANNOUNCE> :pushpin:")},
+			{After: 2 * time.Second, Act: post(uRuth, chContributors, welcomeBackText)},
 		}},
 	}
 }

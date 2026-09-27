@@ -131,18 +131,13 @@ func TestFixtureEmojiExist(t *testing.T) {
 			}
 		}
 	}
-	scripted := append(slices.Clone(replyTexts),
-		"Merged :tada: The flaky `TestSessionRefresh` is gone from CI.",
-		"CI on the plugin branch is green now :white_check_mark:",
-		"Dashboards look great. Nice rollout :clap:",
-		"Welcome back! The 0.9.1 checklist is pinned in <#C1ANNOUNCE> :pushpin:",
-	)
+	scripted := append(slices.Clone(replyTexts), scriptedTexts...)
 	for _, s := range scripted {
 		for _, sub := range shortcodeRe.FindAllStringSubmatch(s, -1) {
 			check("scenario text", sub[1])
 		}
 	}
-	for _, name := range []string{"rocket", "taco", "heart_eyes"} {
+	for _, name := range scriptedEmoji {
 		check("scenario reaction", name)
 	}
 }
