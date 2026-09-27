@@ -34,8 +34,8 @@ func TestAvatarIsStablePerUser(t *testing.T) {
 		t.Fatal("same user rendered differently")
 	}
 
-	// U0ALEX and U0PRIYA were verified (see the hash of each against
-	// avatarPalette) to land on different palette entries, so their
+	// U0ALEX and U0PRIYA were verified to land on different palette
+	// entries (FNV-1a mod 8: U0ALEX -> 0, U0PRIYA -> 7), so their
 	// tiles must differ.
 	if renderAvatar("U0ALEX", "Alex Rivera") == renderAvatar("U0PRIYA", "Priya Shah") {
 		t.Fatal("users with different palette colours rendered the same tile")
