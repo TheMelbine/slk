@@ -184,6 +184,11 @@ func (t *team) userName(id string) string {
 	return id
 }
 
+// hasUser reports whether id is one of the team's users.
+func (t *team) hasUser(id string) bool {
+	return slices.ContainsFunc(t.users, func(u user) bool { return u.id == id })
+}
+
 func (c *channel) latestTS() string {
 	if len(c.messages) == 0 {
 		return ""
@@ -381,6 +386,9 @@ func (w *World) post(channelID, threadTS, userID, txt string, broadcast bool) (c
 		}
 	}
 	t := w.teamByID(c.teamID)
+	if !t.hasUser(userID) {
+		return core.MessageItem{}, false
+	}
 	m := w.newItem(t, userID, txt, w.clock())
 	if parent != nil {
 		parent.ThreadTS = threadTS

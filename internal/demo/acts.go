@@ -58,7 +58,7 @@ func reply(userID, txt string) Act {
 func (s *Scene) post(userID, ch, threadTS, txt string) []tea.Msg {
 	m, ok := s.world.post(ch, threadTS, userID, txt, false)
 	if !ok {
-		return missing("conversation", ch+"/"+threadTS)
+		return missing("conversation or author", ch+"/"+threadTS+"/"+userID)
 	}
 	s.lastChannel, s.lastTS = ch, m.TS
 	return []tea.Msg{ui.NewMessageMsg{ChannelID: ch, Message: m}}

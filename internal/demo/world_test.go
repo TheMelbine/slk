@@ -120,6 +120,9 @@ func TestPostAppendsThreadsAndTracksUnread(t *testing.T) {
 	if _, ok := w.post("C1", "1.000000", "U2", "x", false); ok {
 		t.Error("reply to an unknown thread succeeded")
 	}
+	if _, ok := w.post("C1", "", "UNOPE", "x", false); ok {
+		t.Error("post by an author outside the channel's team succeeded")
+	}
 }
 
 func TestReactTogglesAndReportsTheUsersOwn(t *testing.T) {
