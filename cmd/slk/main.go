@@ -110,6 +110,19 @@ func main() {
 				os.Exit(1)
 			}
 			os.Exit(0)
+		case "--demo":
+			// Hidden: recording mode for the README GIFs. Deliberately
+			// not in printHelp. Runs before the config pre-load below,
+			// so it never reads the user's config.
+			scenario := "hero"
+			if len(os.Args) > 2 {
+				scenario = os.Args[2]
+			}
+			if err := runDemo(scenario); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+			return
 		}
 	}
 
