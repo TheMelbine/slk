@@ -13,7 +13,7 @@ Sleep 1s
 Type@350ms "kkkjj"
 Sleep 700ms
 
-# Jump to #engineering: Priya types, posts, and Sam reacts
+# Jump to #engineering: Priya types, posts "This is fine", and Sam reacts
 Ctrl+T
 Sleep 500ms
 Type@120ms "eng"

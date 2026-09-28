@@ -7,15 +7,12 @@
 package demo
 
 import (
-	"context"
 	"errors"
 	"image"
 	"image/color"
 	"image/draw"
-	"strings"
 
 	"github.com/gammons/slk/internal/core"
-	imgpkg "github.com/gammons/slk/internal/image"
 )
 
 // errUnavailable answers every operation the demo does not fake. The App
@@ -64,36 +61,3 @@ func drawChart() *image.RGBA {
 func fill(img *image.RGBA, r image.Rectangle, c color.RGBA) {
 	draw.Draw(img, r, &image.Uniform{C: c}, image.Point{}, draw.Src)
 }
-
-// chartFetcher is the demo's core.ImageFetcher. It holds the chart in
-// memory and reports it as already cached, so the image renderer never
-// starts a fetch; every other key misses.
-type chartFetcher struct{ img image.Image }
-
-var _ core.ImageFetcher = chartFetcher{}
-
-// isChartKey matches the renderer's cache keys, which are FileID + "-" +
-// the chosen thumb's size.
-func isChartKey(key string) bool { return strings.HasPrefix(key, chartFileID) }
-
-func (f chartFetcher) Fetch(_ context.Context, req imgpkg.FetchRequest) (imgpkg.FetchResult, error) {
-	if !isChartKey(req.Key) {
-		return imgpkg.FetchResult{}, errUnavailable
-	}
-	return imgpkg.FetchResult{Img: f.img, Mime: "image/png"}, nil
-}
-
-func (f chartFetcher) Cached(key string, _ image.Point) (image.Image, bool) {
-	if !isChartKey(key) {
-		return nil, false
-	}
-	return f.img, true
-}
-
-func (chartFetcher) Prerendered(string, image.Point, imgpkg.Protocol) (imgpkg.Render, bool) {
-	return imgpkg.Render{}, false
-}
-
-func (chartFetcher) ConfigurePrerender(imgpkg.Protocol) {}
-
-func (chartFetcher) ConfigurePrerenderKitty(*imgpkg.KittyRenderer) {}

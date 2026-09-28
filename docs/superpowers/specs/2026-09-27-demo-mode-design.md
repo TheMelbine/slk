@@ -29,8 +29,12 @@ hold up along the paths the recording scripts take.
   workspaces, compose. All clips use the same fake data.
 
 Tapes live at `docs/assets/demo/<scenario>.tape`. Each renders
-`docs/assets/demo/<scenario>.gif`. VHS draws through ttyd/xterm.js, which cannot
-show kitty or sixel graphics, so recordings use slk's half-block image path.
+`docs/assets/demo/<scenario>.gif`. VHS draws through ttyd/xterm.js. Stock VHS
+does not capture xterm.js's sixel layer, so the first recordings used slk's
+half-block image path. They now use sixel, recorded with the VHS from
+charmbracelet/vhs#783 (pinned in `flake.nix` until it is released):
+`settings.tape` sets `SLK_DEMO_IMAGES=sixel` and the cell size in pixels,
+which ttyd does not report.
 
 ## Approach
 
@@ -82,8 +86,8 @@ code, so `runDemo()` does not copy it.
 
 `runDemo()` skips: config loading and every config write, tokens and re-minting,
 SQLite, the kitty and sixel probes, WebSocket connections, the status reporter
-and notifications. It uses the half-block image protocol and a fixed timestamp
-format.
+and notifications. It uses the half-block image protocol unless
+`SLK_DEMO_IMAGES=sixel`, and a fixed timestamp format.
 
 ### Services
 
@@ -101,7 +105,7 @@ against its reducer.
 | UnreadService | Computed from World. |
 | WorkspaceService | `Switch` returns a `WorkspaceSwitchedMsg` built from World. |
 | AvatarService | Returns the generated half-block avatar for the user. |
-| ImageFetcher | Serves the generated chart image only. |
+| ImageFetcher | Serves the demo's two images (the chart and the hero's meme) from memory. |
 | SettingsService | Does nothing, so switching theme in the demo never writes the user's config. |
 | PresenceService | Does nothing. |
 | ActivityService, FileService, EditorService, DesktopService | Do nothing, or return a "not available in demo" error, which the App shows as its normal toast. None touch the network or disk. |
@@ -126,16 +130,19 @@ with its own dark theme.
   - a day separator between yesterday and today
   - edited and thread-reply markers
 
-**Driftwood OSS**, an open-source community, with a different theme so that
-switching workspace also shows per-workspace themes.
+**Driftwood OSS**, an open-source community, with a light theme (Catppuccin
+Latte) so that switching workspace also shows per-workspace themes.
 - Channels: `#announcements`, `#contributors`, `#help`, plus one DM.
 - About 6 people.
 - Starts with unread messages, so its rail badge is lit.
 
 **Avatars** are generated in code: the user's initials on a colour derived
 from their ID, drawn with the half-block renderer. There are no image files
-and no licensing questions. **The one inline image** is a bar chart generated
-in code with `image/draw`.
+and no licensing questions. **Inline images:** a bar chart generated in code
+with `image/draw`, in `#design`; and, added after the first recordings, KC
+Green's "This is fine" panels, which Priya posts live in the hero. That one is
+an embedded JPEG used without a licence, at the maintainer's choice; see
+`internal/demo/assets/NOTICE.md`.
 
 ## Director
 
@@ -157,8 +164,8 @@ its rail badge lights up.
 
 `hero` rules:
 1. First time `#engineering` is opened: after 1.5s Priya starts typing for
-   about 2s, then her message arrives, then about 1s later Sam adds a 🚀
-   reaction to it.
+   about 2s, then her message arrives with the "This is fine" image, then
+   about 1s later Sam adds a 😂 reaction to it.
 2. The user sends a message anywhere: after about 1s a teammate starts typing,
    then replies.
 3. Once, a few seconds after start: a new message arrives in Driftwood OSS.
@@ -210,6 +217,6 @@ Plain `testing.T`, white-box.
 
 - Documenting demo mode for users.
 - A fake Slack server, or exercising `cmd/slk`'s fetch and cache pipeline.
-- Kitty or sixel output in recordings.
+- Kitty graphics in recordings (VHS captures sixel only).
 - Workspace-wide search, the Activity view and file upload inside the demo.
 - Generating GIFs in CI.

@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"image"
+	"os"
 	"sync"
 	"time"
 
@@ -10,6 +13,7 @@ import (
 	"github.com/gammons/slk/internal/core"
 	"github.com/gammons/slk/internal/demo"
 	emojiwidth "github.com/gammons/slk/internal/emoji"
+	imgpkg "github.com/gammons/slk/internal/image"
 	"github.com/gammons/slk/internal/ui"
 	"github.com/gammons/slk/internal/ui/styles"
 )
@@ -23,10 +27,32 @@ func runDemo(scenario string) error {
 	if err != nil {
 		return err
 	}
+	proto, err := demoImageProtocol(os.Getenv("SLK_DEMO_IMAGES"))
+	if err != nil {
+		return err
+	}
 	styles.Apply(d.InitialTheme(), core.Theme{})
 	emojiwidth.SetImageMode(false, 2)
 
-	p := tea.NewProgram(newDemoApp(d))
+	var opts []tea.ProgramOption
+	var frames *imgpkg.SixelFrameStore
+	if proto == imgpkg.ProtoSixel {
+		// Sixel is sized in pixels. ttyd (under VHS) reports no pixel
+		// size, so the tapes pass COLORTERM_CELL_WIDTH/HEIGHT.
+		pxW, pxH := imgpkg.CellPixels(int(os.Stdout.Fd()))
+		imgpkg.SetCellPixels(pxW, pxH)
+		d.UseImageProtocol(proto, image.Pt(pxW, pxH))
+		// The same frame-correlated writer run() uses: sixel is painted
+		// after each frame's text, in the frame it belongs to.
+		frames = imgpkg.NewSixelFrameStore()
+		opts = append(opts, tea.WithOutput(imgpkg.NewFrameOutput(os.Stdout, frames)))
+	}
+	app := newDemoApp(d)
+	if frames != nil {
+		app.SetSixelFrameStore(frames)
+	}
+
+	p := tea.NewProgram(app, opts...)
 	ctx, cancel := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -45,6 +71,19 @@ func runDemo(scenario string) error {
 	cancel()
 	wg.Wait()
 	return err
+}
+
+// demoImageProtocol reads SLK_DEMO_IMAGES. Half-block, the default,
+// works in any terminal; sixel is for recording with a VHS that captures
+// sixel (docs/assets/demo/settings.tape).
+func demoImageProtocol(value string) (imgpkg.Protocol, error) {
+	switch value {
+	case "", "halfblock":
+		return imgpkg.ProtoHalfBlock, nil
+	case "sixel":
+		return imgpkg.ProtoSixel, nil
+	}
+	return imgpkg.ProtoOff, fmt.Errorf("SLK_DEMO_IMAGES=%q: want halfblock or sixel", value)
 }
 
 // newDemoApp builds the demo's App. It takes no config, token store or

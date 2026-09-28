@@ -5,6 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/gammons/slk/internal/core"
 	"github.com/gammons/slk/internal/ui"
 )
 
@@ -50,13 +51,18 @@ func post(userID, ch, txt string) Act {
 	return func(s *Scene) []tea.Msg { return s.post(userID, s.channel(ch), "", txt) }
 }
 
+// postImage has userID send txt to ch with att attached.
+func postImage(userID, ch, txt string, att core.Attachment) Act {
+	return func(s *Scene) []tea.Msg { return s.post(userID, s.channel(ch), "", txt, att) }
+}
+
 // reply has userID answer in the triggering event's thread.
 func reply(userID, txt string) Act {
 	return func(s *Scene) []tea.Msg { return s.post(userID, s.event.ChannelID, s.event.ThreadTS, txt) }
 }
 
-func (s *Scene) post(userID, ch, threadTS, txt string) []tea.Msg {
-	m, ok := s.world.post(ch, threadTS, userID, txt, false)
+func (s *Scene) post(userID, ch, threadTS, txt string, atts ...core.Attachment) []tea.Msg {
+	m, ok := s.world.post(ch, threadTS, userID, txt, false, atts...)
 	if !ok {
 		return missing("conversation or author", ch+"/"+threadTS+"/"+userID)
 	}

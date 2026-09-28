@@ -371,8 +371,9 @@ func (w *World) setLastRead(channelID, ts string) {
 // post adds a message by userID, now. A non-empty threadTS makes it a
 // reply to that parent; broadcast also puts it in the channel feed.
 // Messages the user sends leave the channel read; other people's leave it
-// unread, and count as a mention when they name the user.
-func (w *World) post(channelID, threadTS, userID, txt string, broadcast bool) (core.MessageItem, bool) {
+// unread, and count as a mention when they name the user. atts are attached
+// as given.
+func (w *World) post(channelID, threadTS, userID, txt string, broadcast bool, atts ...core.Attachment) (core.MessageItem, bool) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	c := w.byID[channelID]
@@ -390,6 +391,7 @@ func (w *World) post(channelID, threadTS, userID, txt string, broadcast bool) (c
 		return core.MessageItem{}, false
 	}
 	m := w.newItem(t, userID, txt, w.clock())
+	m.Attachments = slices.Clone(atts)
 	if parent != nil {
 		parent.ThreadTS = threadTS
 		parent.ReplyCount++

@@ -19,7 +19,11 @@ Enter
 Sleep 5s
 # Reply; a teammate answers in the thread
 Type "i"
-Type "Thanks all, closing this out :white_check_mark:"
+Type "Thanks all, closing this out :whi"
+# Let the emoji dropdown show, then Tab completes :white_check_mark:
+Sleep 600ms
+Tab
+Sleep 400ms
 Enter
 Sleep 4s
 Escape

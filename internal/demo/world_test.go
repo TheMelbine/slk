@@ -5,6 +5,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/gammons/slk/internal/core"
 )
 
 var testNow = time.Date(2026, 9, 28, 15, 0, 0, 0, time.Local)
@@ -122,6 +124,15 @@ func TestPostAppendsThreadsAndTracksUnread(t *testing.T) {
 	}
 	if _, ok := w.post("C1", "", "UNOPE", "x", false); ok {
 		t.Error("post by an author outside the channel's team succeeded")
+	}
+
+	att := core.Attachment{Kind: "image", FileID: "F1", Thumbs: []core.ThumbSpec{{URL: "demo://f1", W: 4, H: 2}}}
+	img, ok := w.post("C1", "", "U2", "look", false, att)
+	if !ok || len(img.Attachments) != 1 || img.Attachments[0].FileID != "F1" {
+		t.Fatalf("post with an attachment = %+v, %v", img, ok)
+	}
+	if feed, _ := w.messages("C1"); len(feed[len(feed)-1].Attachments) != 1 {
+		t.Error("the World did not keep the attachment")
 	}
 }
 
