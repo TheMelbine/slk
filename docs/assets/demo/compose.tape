@@ -14,7 +14,10 @@ Sleep 400ms
 Enter
 Sleep 1s
 Type "i"
-Type "Sure, how about right after standup? :coffee:"
+Type "Sure, how about right after standup? :coff"
+# Let the emoji dropdown show, then Tab completes :coffee:
+Sleep 600ms
+Tab
 Sleep 400ms
 Enter
 # Sam types and answers
