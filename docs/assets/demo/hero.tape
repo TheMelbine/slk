@@ -21,14 +21,6 @@ Sleep 500ms
 Enter
 Sleep 6s
 
-# Select her message and open the image full-screen
-Type "G"
-Sleep 400ms
-Type "v"
-Sleep 2.5s
-Escape
-Sleep 600ms
-
 # Split vertically and put #deploys alongside
 Ctrl+W
 Type "v"

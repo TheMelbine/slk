@@ -76,10 +76,10 @@ func TestRunDemoRejectsUnknownScenario(t *testing.T) {
 	}
 }
 
-// The hero opens Priya's image full-screen with `v`. This drives the same
-// path on the chart that #design starts with: inline render, then the
-// preview, whose fetch key (FileID + "-preview") differs from the inline
-// renderer's and must also be served by the demo's in-memory images.
+// Opening a demo image full-screen (`v`) must work too. This drives the
+// chart that #design starts with: inline render, then the preview, whose
+// fetch key (FileID + "-preview") differs from the inline renderer's and
+// must also be served by the demo's in-memory images.
 func TestDemoImageOpensFullScreen(t *testing.T) {
 	d, err := demo.New("hero", time.Now())
 	if err != nil {

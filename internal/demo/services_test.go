@@ -158,7 +158,7 @@ func TestWorkspaceSwitch(t *testing.T) {
 	d := testDemo(t)
 	s := d.services()
 	msg, ok := s.workspace.Switch(teamDriftwood).(ui.WorkspaceSwitchedMsg)
-	if !ok || msg.TeamID != teamDriftwood || msg.TeamName != "Driftwood OSS" || msg.Theme != "everforest dark" || msg.UserID != uAlexDW {
+	if !ok || msg.TeamID != teamDriftwood || msg.TeamName != "Driftwood OSS" || msg.Theme != "catppuccin latte" || msg.UserID != uAlexDW {
 		t.Fatalf("Switch = %#v", msg)
 	}
 	if msg.Channels[0].ID != chContributors || msg.UserNames[uRuth] != "Ruth Adeyemi" {

@@ -130,8 +130,8 @@ with its own dark theme.
   - a day separator between yesterday and today
   - edited and thread-reply markers
 
-**Driftwood OSS**, an open-source community, with a different theme so that
-switching workspace also shows per-workspace themes.
+**Driftwood OSS**, an open-source community, with a light theme (Catppuccin
+Latte) so that switching workspace also shows per-workspace themes.
 - Channels: `#announcements`, `#contributors`, `#help`, plus one DM.
 - About 6 people.
 - Starts with unread messages, so its rail badge is lit.
@@ -165,8 +165,7 @@ its rail badge lights up.
 `hero` rules:
 1. First time `#engineering` is opened: after 1.5s Priya starts typing for
    about 2s, then her message arrives with the "This is fine" image, then
-   about 1s later Sam adds a 😂 reaction to it. The hero tape then opens the
-   image full-screen with `v` for a moment.
+   about 1s later Sam adds a 😂 reaction to it.
 2. The user sends a message anywhere: after about 1s a teammate starts typing,
    then replies.
 3. Once, a few seconds after start: a new message arrives in Driftwood OSS.

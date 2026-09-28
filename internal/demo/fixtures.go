@@ -163,7 +163,7 @@ func lumenLabs() teamSpec {
 
 func driftwoodOSS() teamSpec {
 	return teamSpec{
-		id: teamDriftwood, name: "Driftwood OSS", domain: "driftwood-oss", theme: "everforest dark",
+		id: teamDriftwood, name: "Driftwood OSS", domain: "driftwood-oss", theme: "catppuccin latte",
 		selfID: uAlexDW, responder: uRuth, firstChannel: chContributors,
 		users: []user{
 			{id: uAlexDW, name: "Alex Rivera", presence: "active"},
