@@ -40,9 +40,12 @@ func TestHeroEngineeringRule(t *testing.T) {
 	if !ok || posted.ChannelID != chEngineering || posted.Message.UserID != uPriya {
 		t.Fatalf("step 2 = %#v, want Priya's message", got[1])
 	}
+	if atts := posted.Message.Attachments; len(atts) != 1 || atts[0].FileID != memeFileID {
+		t.Fatalf("Priya's message attachments = %+v, want the meme", atts)
+	}
 	reaction, ok := got[2].(ui.ReactionAddedMsg)
-	if !ok || reaction.UserID != uSam || reaction.Emoji != "rocket" || reaction.MessageTS != posted.Message.TS {
-		t.Fatalf("step 3 = %#v, want Sam's rocket on Priya's message", got[2])
+	if !ok || reaction.UserID != uSam || reaction.Emoji != "joy" || reaction.MessageTS != posted.Message.TS {
+		t.Fatalf("step 3 = %#v, want Sam's joy on Priya's message", got[2])
 	}
 	if want := []time.Duration{1500 * time.Millisecond, 2500 * time.Millisecond, 1200 * time.Millisecond}; !slices.Equal(dl.all(), want) {
 		t.Errorf("delays = %v, want %v", dl.all(), want)

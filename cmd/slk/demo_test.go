@@ -74,3 +74,33 @@ func TestRunDemoRejectsUnknownScenario(t *testing.T) {
 		t.Fatalf("runDemo(nope) = %v, want an error listing the scenarios", err)
 	}
 }
+
+// The hero opens Priya's image full-screen with `v`. This drives the same
+// path on the chart that #design starts with: inline render, then the
+// preview, whose fetch key (FileID + "-preview") differs from the inline
+// renderer's and must also be served by the demo's in-memory images.
+func TestDemoImageOpensFullScreen(t *testing.T) {
+	d, err := demo.New("hero", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := newDemoApp(d)
+	deliverDemo(t, app, tea.WindowSizeMsg{Width: 120, Height: 40}, 0)
+	for _, msg := range d.StartupMsgs() {
+		deliverDemo(t, app, msg, 0)
+	}
+	// C0DESIGN is #design in internal/demo's fixtures; its newest message
+	// carries the chart, and opening a channel selects the newest message.
+	deliverDemo(t, app, ui.ChannelSelectedMsg{ID: "C0DESIGN", Name: "design", Type: "channel"}, 0)
+	inline := app.View().Content
+	if strings.Count(inline, "▀") < 200 {
+		t.Fatalf("#design shows no inline half-block image:\n%s", ansi.Strip(inline))
+	}
+
+	deliverDemo(t, app, tea.KeyPressMsg{Code: 'v', Text: "v"}, 0)
+	preview := app.View().Content
+	if got := strings.Count(preview, "▀"); got <= strings.Count(inline, "▀") {
+		t.Fatalf("preview drew %d half-blocks, no more than the inline view's %d:\n%s",
+			got, strings.Count(inline, "▀"), ansi.Strip(preview))
+	}
+}

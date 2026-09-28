@@ -18,12 +18,12 @@ import (
 const connected = 1
 
 // Demo is one demo session: the World, the director playing the chosen
-// scenario, the avatars and the chart.
+// scenario, the avatars and the images.
 type Demo struct {
 	world    *World
 	director *Director
 	avatars  map[string]string // user ID -> rendered tile; read-only after newDemo
-	chart    chartFetcher
+	images   imageStore
 }
 
 // New builds a demo session for scenario, with every fixture time
@@ -37,12 +37,16 @@ func newDemo(scenario string, now time.Time, clock func() time.Time) (*Demo, err
 	if err != nil {
 		return nil, err
 	}
+	images, err := newImageStore()
+	if err != nil {
+		return nil, err
+	}
 	w := newWorld(fixtureTeams(), now, clock)
 	d := &Demo{
 		world:    w,
 		director: newDirector(w, rules),
 		avatars:  map[string]string{},
-		chart:    chartFetcher{img: drawChart()},
+		images:   images,
 	}
 	for _, s := range w.snapshots() {
 		for id, name := range s.userNames {
@@ -81,13 +85,13 @@ func (d *Demo) Install(app *ui.App) {
 	app.SetPresenceService(s.presence)
 	app.SetFileService(s.files)
 
-	app.SetImageFetcher(d.chart)
+	app.SetImageFetcher(d.images)
 	app.SetImageProtocol(imgpkg.ProtoHalfBlock)
 	app.SetImageContext(imgrender.ImageContext{
 		Protocol:   imgpkg.ProtoHalfBlock,
-		Fetcher:    d.chart,
+		Fetcher:    d.images,
 		CellPixels: image.Pt(8, 16),
-		MaxRows:    10,
+		MaxRows:    12,
 		MaxCols:    60,
 	})
 }

@@ -55,11 +55,11 @@ var replyTexts = []string{
 // TestFixtureEmojiExist can check the same values the rules below post
 // instead of literal copies that would drift if a scenario is edited.
 var (
-	heroMergedText    = "Merged :tada: The flaky `TestSessionRefresh` is gone from CI."
+	heroMergedText    = "Merged :tada: The flaky `TestSessionRefresh` is gone from CI. CI for the last month:"
 	ciGreenText       = "CI on the plugin branch is green now :white_check_mark:"
 	dashboardsText    = "Dashboards look great. Nice rollout :clap:"
 	welcomeBackText   = "Welcome back! The 0.9.1 checklist is pinned in <#C1ANNOUNCE> :pushpin:"
-	rocketReaction    = "rocket"
+	joyReaction       = "joy"
 	tacoReaction      = "taco"
 	heartEyesReaction = "heart_eyes"
 )
@@ -67,7 +67,7 @@ var (
 // scriptedTexts and scriptedEmoji are every literal text and reaction
 // name a scenario rule posts, for TestFixtureEmojiExist.
 var scriptedTexts = []string{heroMergedText, ciGreenText, dashboardsText, welcomeBackText}
-var scriptedEmoji = []string{rocketReaction, tacoReaction, heartEyesReaction}
+var scriptedEmoji = []string{joyReaction, tacoReaction, heartEyesReaction}
 
 // answerTheUser: whenever the user sends something, someone starts typing
 // and then answers, in the thread if it was a thread reply.
@@ -78,15 +78,15 @@ func answerTheUser() Rule {
 	}}
 }
 
-// heroRules: Priya types and posts the first time #engineering opens and
-// Sam reacts; the user gets answered; Driftwood OSS lights up in the rail.
+// heroRules: Priya types and posts the "This is fine" meme the first time
+// #engineering opens and Sam reacts; the user gets answered; Driftwood OSS lights up in the rail.
 // TestHeroEngineeringRule depends on the #engineering rule being first.
 func heroRules() []Rule {
 	return []Rule{
 		{When: on(EventChannelOpened, chEngineering), Once: true, Steps: []Step{
 			{After: 1500 * msec, Act: typing(uPriya, chEngineering)},
-			{After: 2500 * msec, Act: post(uPriya, chEngineering, heroMergedText)},
-			{After: 1200 * msec, Act: react(uSam, rocketReaction)},
+			{After: 2500 * msec, Act: postImage(uPriya, chEngineering, heroMergedText, memeAttachment())},
+			{After: 1200 * msec, Act: react(uSam, joyReaction)},
 		}},
 		answerTheUser(),
 		{When: on(EventStart, anyChannel), Once: true, Steps: []Step{
