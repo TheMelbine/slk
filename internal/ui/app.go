@@ -3394,6 +3394,15 @@ func (a *App) collectSixelPlacements(frame panelLayoutFrame) []imgpkg.SixelPlace
 		}
 		return want
 	}
+	// A modal is composited into the frame's text, but sixel is painted
+	// after the text, so any placement published now would land on top
+	// of the modal. Withhold them all: the painter erases the images, and
+	// repaints them once the modal closes and the text beneath changes
+	// back. Kitty images get the same treatment in overlay.DimmedOverlay,
+	// which blanks their placeholder cells (issue #18).
+	if a.overlayActive() {
+		return nil
+	}
 	if a.view != ViewChannels || frame.MsgWidth == 0 {
 		return nil
 	}
