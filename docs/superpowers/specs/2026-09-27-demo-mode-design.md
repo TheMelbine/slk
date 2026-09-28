@@ -101,7 +101,7 @@ against its reducer.
 | UnreadService | Computed from World. |
 | WorkspaceService | `Switch` returns a `WorkspaceSwitchedMsg` built from World. |
 | AvatarService | Returns the generated half-block avatar for the user. |
-| ImageFetcher | Serves the generated chart image only. |
+| ImageFetcher | Serves the demo's two images (the chart and the hero's meme) from memory. |
 | SettingsService | Does nothing, so switching theme in the demo never writes the user's config. |
 | PresenceService | Does nothing. |
 | ActivityService, FileService, EditorService, DesktopService | Do nothing, or return a "not available in demo" error, which the App shows as its normal toast. None touch the network or disk. |
@@ -134,8 +134,11 @@ switching workspace also shows per-workspace themes.
 
 **Avatars** are generated in code: the user's initials on a colour derived
 from their ID, drawn with the half-block renderer. There are no image files
-and no licensing questions. **The one inline image** is a bar chart generated
-in code with `image/draw`.
+and no licensing questions. **Inline images:** a bar chart generated in code
+with `image/draw`, in `#design`; and, added after the first recordings, KC
+Green's "This is fine" panels, which Priya posts live in the hero. That one is
+an embedded JPEG used without a licence, at the maintainer's choice; see
+`internal/demo/assets/NOTICE.md`.
 
 ## Director
 
@@ -157,8 +160,9 @@ its rail badge lights up.
 
 `hero` rules:
 1. First time `#engineering` is opened: after 1.5s Priya starts typing for
-   about 2s, then her message arrives, then about 1s later Sam adds a 🚀
-   reaction to it.
+   about 2s, then her message arrives with the "This is fine" image, then
+   about 1s later Sam adds a 😂 reaction to it. The hero tape then opens the
+   image full-screen with `v` for a moment.
 2. The user sends a message anywhere: after about 1s a teammate starts typing,
    then replies.
 3. Once, a few seconds after start: a new message arrives in Driftwood OSS.

@@ -13,13 +13,21 @@ Sleep 1s
 Type@350ms "kkkjj"
 Sleep 700ms
 
-# Jump to #engineering: Priya types, posts, and Sam reacts
+# Jump to #engineering: Priya types, posts "This is fine", and Sam reacts
 Ctrl+T
 Sleep 500ms
 Type@120ms "eng"
 Sleep 500ms
 Enter
 Sleep 6s
+
+# Select her message and open the image full-screen
+Type "G"
+Sleep 400ms
+Type "v"
+Sleep 2.5s
+Escape
+Sleep 600ms
 
 # Split vertically and put #deploys alongside
 Ctrl+W
