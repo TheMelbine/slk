@@ -5,7 +5,7 @@
 >
 > Marketing site: [getslk.sh](https://getslk.sh) · Docs: [Wiki](https://github.com/gammons/slk/wiki)
 
-![slk screenshot](docs/assets/screenshot.png)
+![slk demo: navigating channels, live messages, a split window and switching workspaces](docs/assets/demo/hero.gif)
 
 `slk` is a daily-driver replacement for the official Slack desktop client, built in Go with [bubbletea](https://github.com/charmbracelet/bubbletea) and [lipgloss](https://github.com/charmbracelet/lipgloss).
 
