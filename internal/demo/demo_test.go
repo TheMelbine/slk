@@ -1,9 +1,11 @@
 package demo
 
 import (
+	"image"
 	"strings"
 	"testing"
 
+	imgpkg "github.com/gammons/slk/internal/image"
 	"github.com/gammons/slk/internal/ui"
 )
 
@@ -37,4 +39,23 @@ func TestStartupMsgs(t *testing.T) {
 
 func TestInstallWiresAnApp(t *testing.T) {
 	testDemo(t).Install(ui.NewApp()) // must not panic; cmd/slk's smoke test renders it
+}
+
+func TestImageContextDefaultsToHalfBlock(t *testing.T) {
+	ctx := testDemo(t).imageContext()
+	if ctx.Protocol != imgpkg.ProtoHalfBlock || ctx.CellPixels != image.Pt(8, 16) {
+		t.Errorf("default image context = %v at %v, want half-block at 8x16", ctx.Protocol, ctx.CellPixels)
+	}
+	if ctx.Fetcher == nil || ctx.MaxRows != 12 || ctx.MaxCols != 60 {
+		t.Errorf("image context = %+v", ctx)
+	}
+}
+
+func TestUseImageProtocolReachesTheImageContext(t *testing.T) {
+	d := testDemo(t)
+	d.UseImageProtocol(imgpkg.ProtoSixel, image.Pt(11, 23))
+	ctx := d.imageContext()
+	if ctx.Protocol != imgpkg.ProtoSixel || ctx.CellPixels != image.Pt(11, 23) {
+		t.Errorf("image context = %v at %v, want sixel at 11x23", ctx.Protocol, ctx.CellPixels)
+	}
 }

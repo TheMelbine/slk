@@ -24,6 +24,11 @@ type Demo struct {
 	director *Director
 	avatars  map[string]string // user ID -> rendered tile; read-only after newDemo
 	images   imageStore
+
+	// proto and cellPx are how Install renders images: half-block at
+	// 8x16 unless UseImageProtocol says otherwise.
+	proto  imgpkg.Protocol
+	cellPx image.Point
 }
 
 // New builds a demo session for scenario, with every fixture time
@@ -47,6 +52,8 @@ func newDemo(scenario string, now time.Time, clock func() time.Time) (*Demo, err
 		director: newDirector(w, rules),
 		avatars:  map[string]string{},
 		images:   images,
+		proto:    imgpkg.ProtoHalfBlock,
+		cellPx:   image.Pt(8, 16),
 	}
 	for _, s := range w.snapshots() {
 		for id, name := range s.userNames {
@@ -86,14 +93,26 @@ func (d *Demo) Install(app *ui.App) {
 	app.SetFileService(s.files)
 
 	app.SetImageFetcher(d.images)
-	app.SetImageProtocol(imgpkg.ProtoHalfBlock)
-	app.SetImageContext(imgrender.ImageContext{
-		Protocol:   imgpkg.ProtoHalfBlock,
+	app.SetImageProtocol(d.proto)
+	app.SetImageContext(d.imageContext())
+}
+
+// UseImageProtocol makes Install render images with proto, sized for
+// terminal cells of cellPx pixels. cmd/slk calls it for recordings that
+// can capture sixel (see docs/assets/demo/settings.tape); call it before
+// Install.
+func (d *Demo) UseImageProtocol(proto imgpkg.Protocol, cellPx image.Point) {
+	d.proto, d.cellPx = proto, cellPx
+}
+
+func (d *Demo) imageContext() imgrender.ImageContext {
+	return imgrender.ImageContext{
+		Protocol:   d.proto,
 		Fetcher:    d.images,
-		CellPixels: image.Pt(8, 16),
+		CellPixels: d.cellPx,
 		MaxRows:    12,
 		MaxCols:    60,
-	})
+	}
 }
 
 // StartupMsgs are what cmd/slk sends as workspaces connect: one ready

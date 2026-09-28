@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/gammons/slk/internal/demo"
+	imgpkg "github.com/gammons/slk/internal/image"
 	"github.com/gammons/slk/internal/ui"
 )
 
@@ -102,5 +103,29 @@ func TestDemoImageOpensFullScreen(t *testing.T) {
 	if got := strings.Count(preview, "▀"); got <= strings.Count(inline, "▀") {
 		t.Fatalf("preview drew %d half-blocks, no more than the inline view's %d:\n%s",
 			got, strings.Count(inline, "▀"), ansi.Strip(preview))
+	}
+}
+
+func TestDemoImageProtocolFromEnv(t *testing.T) {
+	for value, want := range map[string]imgpkg.Protocol{
+		"":          imgpkg.ProtoHalfBlock,
+		"halfblock": imgpkg.ProtoHalfBlock,
+		"sixel":     imgpkg.ProtoSixel,
+	} {
+		got, err := demoImageProtocol(value)
+		if err != nil || got != want {
+			t.Errorf("demoImageProtocol(%q) = %v, %v; want %v", value, got, err, want)
+		}
+	}
+	_, err := demoImageProtocol("kitty")
+	if err == nil || !strings.Contains(err.Error(), "halfblock") || !strings.Contains(err.Error(), "sixel") {
+		t.Errorf("demoImageProtocol(kitty) err = %v, want one naming the valid values", err)
+	}
+}
+
+func TestRunDemoRejectsUnknownImageProtocol(t *testing.T) {
+	t.Setenv("SLK_DEMO_IMAGES", "kitty")
+	if err := runDemo("hero"); err == nil || !strings.Contains(err.Error(), "SLK_DEMO_IMAGES") {
+		t.Fatalf("runDemo with SLK_DEMO_IMAGES=kitty = %v, want an error naming the variable", err)
 	}
 }
