@@ -29,8 +29,12 @@ hold up along the paths the recording scripts take.
   workspaces, compose. All clips use the same fake data.
 
 Tapes live at `docs/assets/demo/<scenario>.tape`. Each renders
-`docs/assets/demo/<scenario>.gif`. VHS draws through ttyd/xterm.js, which cannot
-show kitty or sixel graphics, so recordings use slk's half-block image path.
+`docs/assets/demo/<scenario>.gif`. VHS draws through ttyd/xterm.js. Stock VHS
+does not capture xterm.js's sixel layer, so the first recordings used slk's
+half-block image path. They now use sixel, recorded with the VHS from
+charmbracelet/vhs#783 (pinned in `flake.nix` until it is released):
+`settings.tape` sets `SLK_DEMO_IMAGES=sixel` and the cell size in pixels,
+which ttyd does not report.
 
 ## Approach
 
@@ -82,8 +86,8 @@ code, so `runDemo()` does not copy it.
 
 `runDemo()` skips: config loading and every config write, tokens and re-minting,
 SQLite, the kitty and sixel probes, WebSocket connections, the status reporter
-and notifications. It uses the half-block image protocol and a fixed timestamp
-format.
+and notifications. It uses the half-block image protocol unless
+`SLK_DEMO_IMAGES=sixel`, and a fixed timestamp format.
 
 ### Services
 
@@ -214,6 +218,6 @@ Plain `testing.T`, white-box.
 
 - Documenting demo mode for users.
 - A fake Slack server, or exercising `cmd/slk`'s fetch and cache pipeline.
-- Kitty or sixel output in recordings.
+- Kitty graphics in recordings (VHS captures sixel only).
 - Workspace-wide search, the Activity view and file upload inside the demo.
 - Generating GIFs in CI.
