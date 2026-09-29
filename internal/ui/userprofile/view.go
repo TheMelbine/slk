@@ -278,39 +278,17 @@ func (m *Model) statusRows(innerW int, live Live) []string {
 		rows = append(rows, style.Render(padLeftTo(fit(peerstatus.HuddleGlyph+" In a huddle", innerW), innerW)))
 	}
 	if st.HasStatus(now) {
-		g := st.Glyph(now)
-		if st.InHuddle(now) {
-			// Huddle already claimed the glyph slot; show the status
-			// emoji explicitly here since Glyph() would repeat the
-			// huddle glyph.
-			g = shortcodeGlyph(st.Emoji)
-		}
-		line := strings.TrimSpace(g + " " + st.Text)
+		line := strings.TrimSpace(st.StatusGlyph(now) + " " + st.Text)
 		rows = append(rows, style.Render(padLeftTo(fit(line, innerW), innerW)))
 	}
 	if st.InDND(now) {
 		line := peerstatus.DNDGlyph + " Do not disturb"
 		if !st.DNDEnd.IsZero() {
-			line += " until " + st.DNDEnd.Local().Format("3:04 PM")
+			line += " until " + st.DNDEnd.In(now.Location()).Format("3:04 PM")
 		}
 		rows = append(rows, style.Render(padLeftTo(fit(line, innerW), innerW)))
 	}
 	return rows
-}
-
-// shortcodeGlyph resolves a status emoji shortcode to its glyph, falling
-// back to peerstatus.FallbackGlyph, mirroring peerstatus's own
-// (unexported) resolution so the huddle+status case renders the same
-// glyph peerstatus.Status.Glyph would show for the status alone.
-func shortcodeGlyph(code string) string {
-	name := strings.Trim(code, ":")
-	if name == "" {
-		return ""
-	}
-	if g := slkemoji.CodeMap()[":"+slkemoji.StripSkinTone(name)+":"]; g != "" {
-		return g
-	}
-	return peerstatus.FallbackGlyph
 }
 
 // detailRows renders local time, email and phone, one row per non-empty

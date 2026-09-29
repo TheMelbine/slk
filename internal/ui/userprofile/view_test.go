@@ -184,6 +184,34 @@ func TestView_StatusBlock(t *testing.T) {
 	}
 }
 
+// TestView_DNDTimeUsesLiveNowZone pins the DND "until" time to Live.Now's
+// location, not the machine's local zone: Task 3 renders a golden frame
+// from this view, so it must not depend on the test/CI machine's TZ.
+func TestView_DNDTimeUsesLiveNowZone(t *testing.T) {
+	m := New()
+	m.Open(Seed{TeamID: "T1", UserID: "U1", DisplayName: "Priya"})
+
+	// A fixed zone 9 hours ahead of UTC, chosen so the expected wall
+	// clock differs from both UTC and any plausible machine-local zone.
+	loc := time.FixedZone("JST", 9*3600)
+	now := time.Date(2026, 9, 30, 10, 0, 0, 0, loc) // 10:00 JST
+	end := now.Add(3 * time.Hour)                   // 13:00 JST == 04:00 UTC
+
+	live := Live{
+		Now: now,
+		Status: peerstatus.Status{
+			DND: true, DNDEnd: end,
+		},
+	}
+	out := m.ViewOverlay(80, 30, "", live)
+	if !containsAll(out, "Do not disturb until 1:00 PM") {
+		t.Errorf("DND end time should render in Live.Now's zone (1:00 PM JST), got:\n%s", ansi.Strip(out))
+	}
+	if !containsNone(out, "4:00 AM") {
+		t.Errorf("DND end time must not render in UTC:\n%s", ansi.Strip(out))
+	}
+}
+
 // boxContentLines returns the lines between (and excluding) a
 // rounded-border box's top and bottom edges in a full, possibly padded,
 // rendered frame.
