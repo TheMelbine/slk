@@ -1674,7 +1674,11 @@ func (m *Model) renderMessageEntry(i int, width int, cs cacheStyles, stats *entr
 	if m.avatarFn != nil {
 		avatarStr = m.avatarFn(msg.UserID)
 	}
-	rendered, attachFlushes, attachSixel, attachHits, reactHits := m.renderMessagePlain(msg, width, avatarStr, m.userNames, m.channelNames, i == m.selected, stats)
+	rendered, attachFlushes, attachSixel, attachHits, reactHits, header, headerBudget := m.renderMessagePlain(msg, width, avatarStr, m.userNames, m.channelNames, i == m.selected, stats)
+	// The selected variant carries the date-qualified timestamp. Only
+	// it: linesNormal and linesPlain keep the short form, so clipboard
+	// text and mouse->column mapping are unchanged.
+	renderedSel := SelectedHeader(rendered, header, msg.TS, msg.Timestamp, headerBudget)
 	// Two filled variants: borderFill (Background) for the unselected
 	// pre-render, and the SelectionTintColor for the selected pre-render.
 	// Without per-variant fills, the trailing whitespace of every wrapped
@@ -1692,7 +1696,7 @@ func (m *Model) renderMessageEntry(i int, width int, cs cacheStyles, stats *entr
 		bwT0 = time.Now()
 	}
 	filledNormal := cs.borderFill.Width(width - 1).Render(rendered)
-	renderedTinted := RepaintBgToSelectionTint(rendered, m.focused)
+	renderedTinted := RepaintBgToSelectionTint(renderedSel, m.focused)
 	selectedFill := lipgloss.NewStyle().Background(styles.SelectionTintColor(m.focused)).Width(width - 1).Render(renderedTinted)
 	normal := cs.borderInvis.Render(filledNormal)
 	selected := cs.borderSelect.Render(selectedFill)
@@ -1988,7 +1992,7 @@ func (m *Model) blockkitContext(msg MessageItem, userNames, channelNames map[str
 // avatar gutter (5 cols when an avatar is present), so View() can
 // translate directly to pane-local mouse columns.
 func (m *Model) renderMessagePlain(msg MessageItem, width int, avatarStr string, userNames map[string]string, channelNames map[string]string, isSelected bool, stats *entryPerfStats) (
-	content string, flushes []func(io.Writer) error, sixelRows map[int]sixelEntry, hits []entryHit, reactionHits []reactionEntryHit,
+	content string, flushes []func(io.Writer) error, sixelRows map[int]sixelEntry, hits []entryHit, reactionHits []reactionEntryHit, header string, headerBudget int,
 ) {
 	line := styles.Username(msg.UserID, m.coloredUsernames).Render(msg.UserName) + AuthorStatusSuffix(m.userStatuses, msg.UserID, time.Now()) + lipgloss.NewStyle().Background(styles.Background).Render("  ") + styles.Timestamp.Render(msg.Timestamp)
 
@@ -2467,7 +2471,13 @@ func (m *Model) renderMessagePlain(msg MessageItem, width int, avatarStr string,
 	// Phase 6's wiring; without this merge the body+reaction emoji
 	// kitty uploads would be silently dropped here and the terminal
 	// would show blank cells where placeholder runes were rendered.
-	return msgContent, append(allFlushes, flushes...), allSixel, hits, reactionHits
+	//
+	// The header row is the only row SelectedHeader may lengthen. It
+	// must fit both the width the body wraps to and the columns the row
+	// really has: contentWidth is floored at 20, which at narrow widths
+	// exceeds width-1 (the fill) minus the avatar gutter.
+	headerBudget = min(contentWidth, width-1-(contentColBase-1))
+	return msgContent, append(allFlushes, flushes...), allSixel, hits, reactionHits, line + editedMark, headerBudget
 }
 
 // placeAvatarBeside renders the avatar to the left of the message content.
