@@ -60,11 +60,10 @@ func zoneAbbrev(tz string, at time.Time) string {
 	return abbrev
 }
 
-// profileCacheEntry holds a cached fetch result (or error) and the
-// time it was fetched.
+// profileCacheEntry holds a cached fetch result and the time it was
+// fetched.
 type profileCacheEntry struct {
 	profile   core.UserProfile
-	err       error
 	fetchedAt time.Time
 }
 
