@@ -1440,7 +1440,7 @@ func (m *Model) View(height, width int) string {
 	// lifecycle adds complexity; reply flushes and hit rects ARE captured
 	// in the per-reply loop below.
 	parentIsSelected := m.selected == parentSelected
-	parentContent, _, _ := m.renderThreadMessage(m.parent, width, m.userNames, m.channelNames, parentIsSelected)
+	parentContent, _, _, parentHeader, parentHeaderBudget := m.renderThreadMessage(m.parent, width, m.userNames, m.channelNames, parentIsSelected)
 	m.parentEntry = viewEntry{
 		linesPlain:       messages.PlainLines(parentContent),
 		height:           lipgloss.Height(parentContent),
@@ -1451,6 +1451,8 @@ func (m *Model) View(height, width int) string {
 	// left border + tint when the cursor sits on the parent, invisible
 	// border otherwise so the parent's width matches the reply rows.
 	if parentIsSelected {
+		// After m.parentEntry, so its plain mirror keeps the short form.
+		parentContent = messages.SelectedHeader(parentContent, parentHeader, m.parent.TS, m.parent.Timestamp, parentHeaderBudget)
 		parentContent = lipgloss.NewStyle().BorderStyle(thickLeftBorder).BorderLeft(true).
 			BorderForeground(styles.SelectionBorderColor(m.focused)).
 			BorderBackground(styles.SelectionTintColor(m.focused)).
@@ -1570,7 +1572,9 @@ func (m *Model) View(height, width int) string {
 			// so the cache rebuilds whenever the highlighted index changes.
 			// This matches the messages-pane convention
 			// (internal/ui/messages/model.go:1050).
-			rendered, attachFlushes, reactHits := m.renderThreadMessage(reply, width, m.userNames, m.channelNames, i == m.selected)
+			rendered, attachFlushes, reactHits, header, headerBudget := m.renderThreadMessage(reply, width, m.userNames, m.channelNames, i == m.selected)
+			// Selected variant only; linesNormal / linesPlain keep the short form.
+			renderedSel := messages.SelectedHeader(rendered, header, reply.TS, reply.Timestamp, headerBudget)
 			// Two filled variants — see internal/ui/messages/model.go for the
 			// rationale. Without per-variant fills, the trailing whitespace of
 			// every wrapped line shows the wrong bg and the tint stops at the
@@ -1581,7 +1585,7 @@ func (m *Model) View(height, width int) string {
 			// escapes (Username, Timestamp, MessageText, RenderSlackMarkdown's
 			// reset-reapplications) with the tint color so the tint reaches
 			// every cell of the row, not just the trailing whitespace.
-			renderedTinted := messages.RepaintBgToSelectionTint(rendered, m.focused)
+			renderedTinted := messages.RepaintBgToSelectionTint(renderedSel, m.focused)
 			selectedFill := lipgloss.NewStyle().
 				Background(styles.SelectionTintColor(m.focused)).
 				Width(width - 1).
@@ -1972,7 +1976,7 @@ func (m *Model) blockkitContext(msg messages.MessageItem, userNames, channelName
 	}
 }
 
-func (m *Model) renderThreadMessage(msg messages.MessageItem, width int, userNames map[string]string, channelNames map[string]string, isSelected bool) (string, []func(io.Writer) error, []reactionEntryHit) {
+func (m *Model) renderThreadMessage(msg messages.MessageItem, width int, userNames map[string]string, channelNames map[string]string, isSelected bool) (string, []func(io.Writer) error, []reactionEntryHit, string, int) {
 	line := styles.Username(msg.UserID, m.coloredUsernames).Render(msg.UserName) + messages.AuthorStatusSuffix(m.userStatuses, msg.UserID, time.Now()) + lipgloss.NewStyle().Background(styles.Background).Render("  ") + styles.Timestamp.Render(msg.Timestamp)
 
 	contentWidth := width - 4
@@ -2229,5 +2233,8 @@ func (m *Model) renderThreadMessage(msg messages.MessageItem, width int, userNam
 		}
 	}
 
-	return line + bodyRow + bkBlock + attachmentLines + reactionLine, flushes, reactionHits
+	// Header width budget for messages.SelectedHeader: the body's wrap
+	// width, capped at the columns the row really has (width-1 after the
+	// thick left border) because contentWidth is floored at 20.
+	return line + bodyRow + bkBlock + attachmentLines + reactionLine, flushes, reactionHits, line, min(contentWidth, width-1)
 }
