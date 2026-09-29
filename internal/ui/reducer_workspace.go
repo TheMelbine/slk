@@ -299,6 +299,12 @@ func reduceWorkspaceSwitched(a *App, m WorkspaceSwitchedMsg) tea.Cmd {
 	if a.compose.Uploading() || a.threadCompose.Uploading() {
 		return a.uploadToastCmd("Upload in progress", 2*time.Second)
 	}
+	if a.userProfile.IsVisible() {
+		a.userProfile.Close()
+		if a.mode == ModeUserProfile {
+			a.SetMode(ModeNormal)
+		}
+	}
 	if m.Domain != "" {
 		a.workspaceDomains[m.TeamID] = m.Domain
 	}
