@@ -55,7 +55,12 @@ type viewEntry struct {
 	// For separator entries (msgIdx == -1) the two slices are identical.
 	linesNormal   []string
 	linesSelected []string
-	linesPlain    []plainLine // column-aligned mirror of CONTENT (sans border)
+	// linesSelectedShort is the selected variant with the short
+	// timestamp; nil when it equals linesSelected. Shown while a text
+	// selection exists: the drag overlay splices linesPlain (short form)
+	// into the displayed row by column, so the long header would garble.
+	linesSelectedShort []string
+	linesPlain         []plainLine // column-aligned mirror of CONTENT (sans border)
 	// contentColOffset is the number of display columns at the START of each
 	// linesNormal[i] that belong to chrome (e.g. the thick left border ▌ on
 	// message entries) and should be skipped when mapping mouse columns to
@@ -1696,16 +1701,21 @@ func (m *Model) renderMessageEntry(i int, width int, cs cacheStyles, stats *entr
 		bwT0 = time.Now()
 	}
 	filledNormal := cs.borderFill.Width(width - 1).Render(rendered)
-	renderedTinted := RepaintBgToSelectionTint(renderedSel, m.focused)
-	selectedFill := lipgloss.NewStyle().Background(styles.SelectionTintColor(m.focused)).Width(width - 1).Render(renderedTinted)
+	selectedFill := lipgloss.NewStyle().Background(styles.SelectionTintColor(m.focused)).Width(width - 1)
+	selectedVariant := func(r string) []string {
+		return strings.Split(cs.borderSelect.Render(selectedFill.Render(RepaintBgToSelectionTint(r, m.focused))), "\n")
+	}
 	normal := cs.borderInvis.Render(filledNormal)
-	selected := cs.borderSelect.Render(selectedFill)
+	linesS := selectedVariant(renderedSel)
+	var linesSShort []string
+	if renderedSel != rendered {
+		linesSShort = selectedVariant(rendered)
+	}
 	if stats != nil {
 		stats.borderWrapTotal += time.Since(bwT0)
 	}
 
 	linesN := strings.Split(normal, "\n")
-	linesS := strings.Split(selected, "\n")
 	// linesPlain mirrors the UNBORDERED content (filled) so that the
 	// thick left-border column is NOT present in plain text and never
 	// bleeds into clipboard output via SelectionText. The mouse-column
@@ -1727,19 +1737,23 @@ func (m *Model) renderMessageEntry(i int, width int, cs cacheStyles, stats *entr
 	if i < len(m.messages)-1 {
 		linesN = append(linesN, cs.spacerLines...)
 		linesS = append(linesS, cs.spacerLines...)
+		if linesSShort != nil {
+			linesSShort = append(linesSShort, cs.spacerLines...)
+		}
 		linesP = append(linesP, plainLine{Text: "", Bytes: []int{0}})
 	}
 	return viewEntry{
-		linesNormal:      linesN,
-		linesSelected:    linesS,
-		linesPlain:       linesP,
-		contentColOffset: 1, // thick left border ▌ occupies column 0 of linesNormal
-		height:           len(linesN),
-		msgIdx:           i,
-		flushes:          attachFlushes,
-		sixelRows:        attachSixel,
-		imageHits:        attachHits,
-		reactionHits:     reactHits,
+		linesNormal:        linesN,
+		linesSelected:      linesS,
+		linesSelectedShort: linesSShort,
+		linesPlain:         linesP,
+		contentColOffset:   1, // thick left border ▌ occupies column 0 of linesNormal
+		height:             len(linesN),
+		msgIdx:             i,
+		flushes:            attachFlushes,
+		sixelRows:          attachSixel,
+		imageHits:          attachHits,
+		reactionHits:       reactHits,
 	}
 }
 
@@ -2773,6 +2787,12 @@ func (m *Model) BeginSelectionAt(viewportY, x int) {
 		return
 	}
 	m.selRange = selection.Range{Start: a, End: a, Active: true}
+	if !m.hasSelection {
+		// The one exception to the rule below: the selected row swaps to
+		// its short-timestamp variant (see selectedLines), which changes
+		// the bordered output. Once per drag, not per cell of motion.
+		m.dirty()
+	}
 	m.hasSelection = true
 	// No m.dirty() here: the App-layer bordered render cache stores
 	// the SELECTION-FREE output (see ViewBare + ApplySelectionToBordered),
@@ -2821,6 +2841,7 @@ func (m *Model) EndSelection() (string, bool) {
 	if m.selRange.IsEmpty() {
 		m.hasSelection = false
 		m.selRange = selection.Range{}
+		m.dirty() // selectedLines swaps back to the long timestamp
 		return "", false
 	}
 	text := m.SelectionText()
@@ -2837,6 +2858,19 @@ func (m *Model) ClearSelection() {
 	}
 	m.hasSelection = false
 	m.selRange = selection.Range{}
+	m.dirty() // selectedLines swaps back to the long timestamp
+}
+
+// selectedLines returns the lines to draw for the selected entry e: the
+// long-timestamp variant, or the short one while a text selection exists.
+// The drag overlay (applySelectionToRows) splices linesPlain, which holds
+// the short form, into the displayed row by column; the long header would
+// come out garbled.
+func (m *Model) selectedLines(e viewEntry) []string {
+	if m.hasSelection && e.linesSelectedShort != nil {
+		return e.linesSelectedShort
+	}
+	return e.linesSelected
 }
 
 // HasSelection reports whether a selection is currently active or
@@ -3235,7 +3269,7 @@ func (m *Model) viewInternal(height, width int, applySelection bool) string {
 		}
 		var lines []string
 		if e.msgIdx == m.selected {
-			lines = e.linesSelected
+			lines = m.selectedLines(e)
 		} else {
 			lines = e.linesNormal
 		}

@@ -46,6 +46,10 @@ func assertHeightsMatch(t *testing.T, m *Model) {
 			t.Errorf("entry %d: len(linesSelected)=%d != len(linesNormal)=%d",
 				i, len(e.linesSelected), len(e.linesNormal))
 		}
+		if e.linesSelectedShort != nil && len(e.linesSelectedShort) != len(e.linesNormal) {
+			t.Errorf("entry %d: len(linesSelectedShort)=%d != len(linesNormal)=%d",
+				i, len(e.linesSelectedShort), len(e.linesNormal))
+		}
 	}
 }
 
@@ -129,6 +133,60 @@ func TestSelectedTimestamp_EditedMarkCountsTowardWidth(t *testing.T) {
 		t.Fatalf("edited header overflowed with long timestamp:\n%s", view)
 	}
 	assertHeightsMatch(t, m)
+}
+
+// selectedHeaderY returns the pane-local viewportY of the selected
+// message's header row (BeginSelectionAt's coordinate system).
+func selectedHeaderY(t *testing.T, m *Model) int {
+	t.Helper()
+	for i, e := range m.cache {
+		if e.msgIdx == m.selected {
+			return m.chromeHeight + m.entryOffsets[i] - m.yOffset
+		}
+	}
+	t.Fatalf("no cache entry for selected index %d", m.selected)
+	return 0
+}
+
+// The drag overlay splices linesPlain (short form) into the displayed row
+// by column, so while a text selection exists the selected row must show
+// the short form or the header is garbled.
+func TestSelectedTimestamp_DragOverHeaderKeepsTextIntact(t *testing.T) {
+	m, _ := longTSModel(t, longTSItems(), 80)
+	y := selectedHeaderY(t, m)
+	m.BeginSelectionAt(y, 0)
+	m.ExtendSelectionAt(y, 8)
+	view := ansi.Strip(m.View(40, 80))
+	if !strings.Contains(view, "lee  3:42 PM") || strings.Contains(view, "Sep 29") {
+		t.Fatalf("drag over selected header garbled it or kept the long form:\n%s", view)
+	}
+	m.ClearSelection()
+	view = ansi.Strip(m.View(40, 80))
+	if !strings.Contains(view, "lee  Tue Sep 29, 3:42 PM") {
+		t.Fatalf("long form did not return after ClearSelection:\n%s", view)
+	}
+}
+
+// The App caches the selection-free bordered render by Version(), so a
+// change in which selected variant is shown must bump it, but drag motion
+// must not (perf: one bump per cell of motion would defeat the cache).
+func TestSelectedTimestamp_SelectionToggleBumpsVersion(t *testing.T) {
+	m, _ := longTSModel(t, longTSItems(), 80)
+	y := selectedHeaderY(t, m)
+	v0 := m.Version()
+	m.BeginSelectionAt(y, 0)
+	v1 := m.Version()
+	if v1 == v0 {
+		t.Fatal("BeginSelectionAt did not bump Version; the App cache would keep the long-form row")
+	}
+	m.ExtendSelectionAt(y, 8)
+	if m.Version() != v1 {
+		t.Fatal("ExtendSelectionAt bumped Version; drag motion must stay cache-friendly")
+	}
+	m.ClearSelection()
+	if m.Version() == v1 {
+		t.Fatal("ClearSelection did not bump Version; the long form would not return")
+	}
 }
 
 func TestSelectedTimestamp_CopyUsesShortForm(t *testing.T) {

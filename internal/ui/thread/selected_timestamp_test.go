@@ -53,6 +53,10 @@ func assertThreadHeightsMatch(t *testing.T, m *Model) {
 			t.Errorf("reply %d: len(linesSelected)=%d != len(linesNormal)=%d",
 				i, len(e.linesSelected), len(e.linesNormal))
 		}
+		if e.linesSelectedShort != nil && len(e.linesSelectedShort) != len(e.linesNormal) {
+			t.Errorf("reply %d: len(linesSelectedShort)=%d != len(linesNormal)=%d",
+				i, len(e.linesSelectedShort), len(e.linesNormal))
+		}
 	}
 }
 
@@ -161,6 +165,44 @@ func TestThreadSelectedTimestamp_TinyWidthFallsBack(t *testing.T) {
 		}
 	}
 	assertThreadHeightsMatch(t, m)
+}
+
+// The drag overlay splices linesPlain (short form) into the displayed row
+// by column, so while a text selection exists the selected row must show
+// the short form or the header is garbled.
+func TestThreadSelectedTimestamp_DragOverReplyHeaderKeepsTextIntact(t *testing.T) {
+	m, _ := threadLongTS(t, "priya", "lee", 80, 30)
+	y := m.chromeHeight + m.entryOffsets[len(m.entryOffsets)-1] - m.vp.YOffset()
+	m.BeginSelectionAt(y, 0)
+	m.ExtendSelectionAt(y, 8)
+	view := strings.Join(stripRows(m.View(30, 80)), "\n")
+	if !strings.Contains(view, "lee  3:42 PM") || strings.Contains(view, "Sep 29") {
+		t.Fatalf("drag over selected reply header garbled it or kept the long form:\n%s", view)
+	}
+	m.ClearSelection()
+	view = strings.Join(stripRows(m.View(30, 80)), "\n")
+	if !strings.Contains(view, "lee  Tue Sep 29, 3:42 PM") {
+		t.Fatalf("long form did not return after ClearSelection:\n%s", view)
+	}
+}
+
+func TestThreadSelectedTimestamp_DragOverParentHeaderKeepsTextIntact(t *testing.T) {
+	m, _ := threadLongTS(t, "priya", "lee", 80, 30)
+	m.GoToTop()
+	m.MoveUp() // parent
+	_ = m.View(30, 80)
+	y := m.chromeHeight - m.vp.YOffset()
+	m.BeginSelectionAt(y, 0)
+	m.ExtendSelectionAt(y, 8)
+	view := strings.Join(stripRows(m.View(30, 80)), "\n")
+	if !strings.Contains(view, "priya  3:40 PM") || strings.Contains(view, "Sep 29") {
+		t.Fatalf("drag over selected parent header garbled it or kept the long form:\n%s", view)
+	}
+	m.ClearSelection()
+	view = strings.Join(stripRows(m.View(30, 80)), "\n")
+	if !strings.Contains(view, "priya  Tue Sep 29, 3:40 PM") {
+		t.Fatalf("long form did not return on the parent after ClearSelection:\n%s", view)
+	}
 }
 
 func TestThreadSelectedTimestamp_CopyUsesShortForm(t *testing.T) {
