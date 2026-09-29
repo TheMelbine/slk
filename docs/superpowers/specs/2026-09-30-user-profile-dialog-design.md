@@ -14,8 +14,10 @@ pane, or a reply in the thread panel. `K`, `esc` or `q` closes the dialog
 and returns to normal mode. It changes nothing else: channel, selection,
 focus, thread and compose draft stay as they were.
 
-No selection, or a message with no user ID (a bot message carrying only a
-`bot_id`), shows the toast `No profile for this message` and opens nothing.
+No selection, a message with no user ID (a bot message carrying only a
+`bot_id`), or a message whose `UserID` starts with `B` (the bot-ID
+substitute `cmd/slk/history.go:279` uses when a message has no human
+author), shows the toast `No profile for this message` and opens nothing.
 
 `K` is bound as `KeyMap.UserProfile` with help text "show author's
 profile", so the `?` overlay lists it.
@@ -56,7 +58,11 @@ with only as many rows as it needs:
   it, so for other users the indicator is left out rather than guessed.
 - **Line 2:** `@handle`, plus ` · pronouns` when set. Badges: `APP` for
   bots and app users, `external` for Slack Connect users, and a dimmed
-  `deactivated` when `users.info` reports `deleted: true`.
+  `deactivated` when `users.info` reports `deleted: true`. Handle, real
+  name and the `APP` badge come from the fetch — the UI's cached seed
+  carries only display names — so before the fetch returns, line 2 shows
+  only `external` when the user is already known to be external, and is
+  otherwise empty.
 - **Title:** shown when non-empty.
 - **Status block:** custom status, DND and huddle state, from the
   presence controller's `peers[userID]` `peerstatus.Status`, rendered
@@ -66,11 +72,13 @@ with only as many rows as it needs:
   they appear as one `Loading profile…` line, and after a failure as
   one error line (see Errors). Empty fields are left out, not shown as `—`.
 - **Local time:** the author's wall clock from `users.info`'s `tz_offset`,
-  with `tz_label`'s abbreviation when there is one, and the difference
-  from **this machine's** local offset (`time.Local`; slk does not know
-  the signed-in user's Slack timezone). Formats: `−3h`, `+5h30m`,
-  `same time as you`. It uses an injectable clock so goldens are
-  deterministic.
+  with the zone abbreviation (`PDT`) when there is one — derived in
+  `cmd/slk` from the IANA `tz` name via `time.LoadLocation`; numeric
+  abbreviations such as `-03` are dropped, not shown — and the
+  difference from **this machine's** local offset (`time.Local`; slk
+  does not know the signed-in user's Slack timezone). Formats: `−3h`,
+  `+5h30m`, `same time as you`. It uses an injectable clock so goldens
+  are deterministic.
 - **Narrow or short terminals:** values are truncated with `…`
   (`emoji.Width`-aware). When the box is taller than the screen allows,
   rows are dropped from the bottom up: details first, then status, then
@@ -92,10 +100,11 @@ type ProfileService interface {
 }
 ```
 
-`core.UserProfile` (in `types.go`) holds `UserID, Title, Pronouns, Email,
-Phone, TZ, TZLabel string; TZOffset int; Deleted bool`. As with the other
-ports, a `NewProfileService(ProfileServiceFuncs{...})` adapter returns an
-unsupported error when its func is nil.
+`core.UserProfile` (in `types.go`) holds `UserID, TeamID, Handle, RealName,
+DisplayName, Title, Pronouns, Email, Phone, TZ, TZAbbrev string; TZOffset
+int; IsBot, Deleted bool`. As with the other ports, a
+`NewProfileService(ProfileServiceFuncs{...})` adapter returns
+`errors.ErrUnsupported` when its func is nil.
 
 ### Composition root (`cmd/slk`)
 
