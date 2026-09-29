@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -3593,15 +3592,11 @@ func (m *Model) ApplySelectionToBordered(bordered string, topBorderRows, leftBor
 // parsed. Exported so the thread pane can reuse the same day-boundary
 // computation that drives the channel pane's date separators.
 func DateFromTS(ts string) string {
-	parts := strings.SplitN(ts, ".", 2)
-	if len(parts) == 0 {
+	t, ok := timeFromTS(ts)
+	if !ok {
 		return ""
 	}
-	sec, err := strconv.ParseInt(parts[0], 10, 64)
-	if err != nil {
-		return ""
-	}
-	return time.Unix(sec, 0).Format("2006-01-02")
+	return t.Format("2006-01-02")
 }
 
 // nowFunc is the clock FormatDateSeparator reads. Production leaves it
