@@ -4122,7 +4122,7 @@ func TestCtrlHTriggersNavBack(t *testing.T) {
 	}
 }
 
-func TestCtrlKTriggersNavForward(t *testing.T) {
+func TestCtrlLTriggersNavForward(t *testing.T) {
 	app := NewApp()
 	app.activeTeamID = "T1"
 	app.setChannelLookupFuncForTest(func(channelID ids.ChannelID) (string, string, bool) {
@@ -4133,9 +4133,9 @@ func TestCtrlKTriggersNavForward(t *testing.T) {
 	_, _ = app.Update(ChannelSelectedMsg{ID: "C2", Name: "b", Type: "channel"})
 	app.navHistory.Stack("T1").cursor = 0
 
-	cmd := app.handleNormalMode(tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl})
+	cmd := app.handleNormalMode(tea.KeyPressMsg{Code: 'l', Mod: tea.ModCtrl})
 	if cmd == nil {
-		t.Fatal("expected cmd from ctrl+k dispatch")
+		t.Fatal("expected cmd from ctrl+l dispatch")
 	}
 	got := cmd()
 	cs, ok := got.(ChannelSelectedMsg)
