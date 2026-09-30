@@ -22,13 +22,55 @@ const maxBoxWidth = 56
 // 10 cells) plus a 2-cell gap.
 const detailLabelWidth = 12
 
+// CopyIcon marks the email as copyable (click it, or press e).
+const CopyIcon = "\U0001F4CB" // 📋
+
+// copyFooter is the footer while there is an email to copy.
+const copyFooter = "e copy email \u00b7 K / esc / q close"
+
+// boxLayout is one rendered box and where its copy icon landed, in
+// box-local cells (border included); iconRow is -1 when no icon was
+// drawn (no email, still loading, or the details were dropped).
+type boxLayout struct {
+	box              string
+	iconRow, iconCol int
+}
+
+// BoxSize returns the outer dimensions of the box the last frame drew,
+// (0, 0) when hidden. It satisfies the modal-click router's geometry
+// interface.
+func (m *Model) BoxSize(termW, termH int) (int, int) {
+	if !m.visible {
+		return 0, 0
+	}
+	l := m.layout(termW, termH, m.lastLive)
+	if l.box == "" {
+		return 0, 0
+	}
+	return lipgloss.Width(l.box), lipgloss.Height(l.box)
+}
+
+// ClickAt reports whether the box-local cell (x, y) is on the email's
+// copy icon as the last frame drew it.
+func (m *Model) ClickAt(termW, termH, x, y int) bool {
+	if !m.visible {
+		return false
+	}
+	l := m.layout(termW, termH, m.lastLive)
+	if l.iconRow < 0 || y != l.iconRow {
+		return false
+	}
+	return x >= l.iconCol && x < l.iconCol+slkemoji.Width(CopyIcon)
+}
+
 // ViewOverlay composites the modal onto background. Returns background
 // unchanged when hidden.
 func (m *Model) ViewOverlay(termW, termH int, background string, live Live) string {
 	if !m.visible {
 		return background
 	}
-	box := m.renderBox(termW, termH, live)
+	m.lastLive = live
+	box := m.layout(termW, termH, live).box
 	if box == "" {
 		return background
 	}
@@ -60,11 +102,11 @@ func (m *Model) headerName() string {
 	return m.seed.UserID
 }
 
-// renderBox builds the full modal box, given the render-time Live
-// inputs, dropping rows bottom-up (details, then status, then title)
-// when termH is too short to hold everything. Name and handle rows are
-// always kept.
-func (m *Model) renderBox(termW, termH int, live Live) string {
+// layout builds the full modal box, given the render-time Live inputs,
+// dropping rows bottom-up (details, then status, then title) when termH
+// is too short to hold everything, and records where the email's copy
+// icon landed. Name and handle rows are always kept.
+func (m *Model) layout(termW, termH int, live Live) boxLayout {
 	boxW := maxBoxWidth
 	if termW-4 < boxW {
 		boxW = termW - 4
@@ -88,25 +130,33 @@ func (m *Model) renderBox(termW, termH int, live Live) string {
 	nameRows := m.nameRows(innerW, live)
 	titleRow := m.titleRow(innerW)
 	statusRows := m.statusRows(innerW, live)
-	detailRows := m.detailRows(innerW, live)
+	detailRows, emailIdx, emailIconCol := m.detailRows(innerW, live)
 
+	footerText := "K / esc / q close"
+	if emailIdx >= 0 {
+		footerText = copyFooter
+	}
 	footer := lipgloss.NewStyle().
 		Background(bg).
 		Foreground(styles.TextMuted).
-		Render(padLeftTo(fit("K / esc / q close", innerW), innerW))
+		Render(padLeftTo(fit(footerText, innerW), innerW))
 
 	// Height budget: title + blank + footer + blank, plus whatever
 	// content rows fit. Drop bottom-up: details, then status, then
 	// title. Name/handle rows are never dropped.
-	sections := [][]string{}
+	type section struct {
+		rows    []string
+		details bool
+	}
+	sections := []section{}
 	if titleRow != "" {
-		sections = append(sections, []string{titleRow})
+		sections = append(sections, section{rows: []string{titleRow}})
 	}
 	if len(statusRows) > 0 {
-		sections = append(sections, statusRows)
+		sections = append(sections, section{rows: statusRows})
 	}
 	if len(detailRows) > 0 {
-		sections = append(sections, detailRows)
+		sections = append(sections, section{rows: detailRows, details: true})
 	}
 
 	fixedRows := 4 // title line, blank, blank-before-footer, footer
@@ -118,22 +168,36 @@ func (m *Model) renderBox(termW, termH int, live Live) string {
 	// Drop whole sections from the tail (details, then status, then
 	// title) until what remains fits budget. Each kept section costs
 	// its own rows plus one blank separator before it.
-	for cost(sections) > budget && len(sections) > 0 {
+	cost := func() int {
+		total := 0
+		for _, s := range sections {
+			total += 1 + len(s.rows) // blank separator + its rows
+		}
+		return total
+	}
+	for cost() > budget && len(sections) > 0 {
 		sections = sections[:len(sections)-1]
 	}
 
-	var body []string
-	body = append(body, nameRows...)
+	body := append([]string{}, nameRows...)
+	iconBodyIdx := -1
 	for _, sec := range sections {
-		body = append(body, "")
-		body = append(body, sec...)
+		// Sections are never empty, so the separator is the only
+		// blank row that can precede them; collapse it when the body
+		// already ends blank (e.g. an empty line 2).
+		if len(body) == 0 || strings.TrimSpace(body[len(body)-1]) != "" {
+			body = append(body, "")
+		}
+		if sec.details && emailIdx >= 0 {
+			iconBodyIdx = len(body) + emailIdx
+		}
+		body = append(body, sec.rows...)
 	}
-	body = collapseBlankRuns(body)
 
 	content := title + "\n\n" + strings.Join(body, "\n") + "\n\n" + footer
 	content = messages.ReapplyBgAfterResets(content, messages.BgANSI()+messages.FgANSI())
 
-	return lipgloss.NewStyle().
+	box := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(styles.Primary).
 		BorderBackground(bg).
@@ -141,36 +205,15 @@ func (m *Model) renderBox(termW, termH int, live Live) string {
 		Padding(0, 1).
 		Width(boxW).
 		Render(content)
-}
 
-// collapseBlankRuns merges consecutive blank rows into one, so an empty
-// status block (whose section still contributes its separating blank
-// row) doesn't leave two adjacent blank rows next to the details
-// section's own separator.
-func collapseBlankRuns(rows []string) []string {
-	out := make([]string, 0, len(rows))
-	prevBlank := false
-	for _, r := range rows {
-		blank := strings.TrimSpace(r) == ""
-		if blank && prevBlank {
-			continue
-		}
-		out = append(out, r)
-		prevBlank = blank
+	l := boxLayout{box: box, iconRow: -1}
+	if iconBodyIdx >= 0 {
+		// Box rows: top border, title, blank, then the body.
+		l.iconRow = 3 + iconBodyIdx
+		// Box columns: left border, left padding, then the row.
+		l.iconCol = 2 + emailIconCol
 	}
-	return out
-}
-
-// cost sums the row cost of the given sections. Sections are appended
-// in "title, status, details" visual order; dropping from the tail (as
-// renderBox does) drops details first, then status, then title, per
-// the spec's row-priority.
-func cost(sections [][]string) int {
-	total := 0
-	for _, sec := range sections {
-		total += 1 + len(sec) // blank separator + its rows
-	}
-	return total
+	return l
 }
 
 // nameRows builds the header (name + presence) and line-2 (@handle,
@@ -292,20 +335,23 @@ func (m *Model) statusRows(innerW int, live Live) []string {
 }
 
 // detailRows renders local time, email and phone, one row per non-empty
-// field, labels padded to a common column.
-func (m *Model) detailRows(innerW int, live Live) []string {
+// field, labels padded to a common column. When an email is shown,
+// emailIdx is its index in rows and iconCol the inner-row column the
+// copy icon starts at; emailIdx is -1 otherwise. The email is truncated
+// first, so the icon always fits.
+func (m *Model) detailRows(innerW int, live Live) (rows []string, emailIdx, iconCol int) {
 	bg := styles.Background
 	valueStyle := lipgloss.NewStyle().Background(bg).Foreground(styles.TextPrimary)
 	mutedStyle := lipgloss.NewStyle().Background(bg).Foreground(styles.TextMuted)
 
+	emailIdx = -1
 	if m.state == stateLoading {
-		return []string{mutedStyle.Render(padLeftTo(fit("Loading profile\u2026", innerW), innerW))}
+		return []string{mutedStyle.Render(padLeftTo(fit("Loading profile\u2026", innerW), innerW))}, -1, 0
 	}
 	if m.state == stateFailed {
-		return []string{mutedStyle.Render(padLeftTo(fit(errorLine(m.err), innerW), innerW))}
+		return []string{mutedStyle.Render(padLeftTo(fit(errorLine(m.err), innerW), innerW))}, -1, 0
 	}
 
-	var rows []string
 	addRow := func(label, value string) {
 		if value == "" {
 			return
@@ -316,9 +362,20 @@ func (m *Model) detailRows(innerW int, live Live) []string {
 	if m.profile.TZ != "" {
 		addRow("Local time", formatLocalTime(live.Now, m.profile.TZOffset, m.profile.TZAbbrev))
 	}
-	addRow("Email", m.profile.Email)
+	if email := m.profile.Email; email != "" {
+		suffix := " " + CopyIcon
+		head := fit(padLabel("Email", detailLabelWidth)+email, innerW-slkemoji.Width(suffix))
+		if head != "" {
+			emailIdx = len(rows)
+			iconCol = slkemoji.Width(head) + 1
+			rows = append(rows, valueStyle.Render(padLeftTo(head+suffix, innerW)))
+		} else {
+			// Too narrow for the icon: plain row, nothing to click.
+			addRow("Email", email)
+		}
+	}
 	addRow("Phone", m.profile.Phone)
-	return rows
+	return rows, emailIdx, iconCol
 }
 
 // padLabel right-pads label with spaces to width columns.

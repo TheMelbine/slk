@@ -57,6 +57,11 @@ type Model struct {
 	state   fetchState
 	profile core.UserProfile
 	err     error
+	// lastLive is the Live the most recent frame was drawn with.
+	// BoxSize and ClickAt lay the box out again from it so their
+	// geometry matches what is on screen (status rows above the
+	// details move the email row).
+	lastLive Live
 }
 
 // New creates an empty, hidden modal.
@@ -77,6 +82,15 @@ func (m *Model) Open(s Seed) {
 // Close hides the modal and clears its state.
 func (m *Model) Close() {
 	*m = Model{}
+}
+
+// Email returns the loaded profile's email, "" until the fetch has
+// succeeded or when the user has none.
+func (m *Model) Email() string {
+	if m.state != stateLoaded {
+		return ""
+	}
+	return m.profile.Email
 }
 
 // IsVisible reports whether the modal is showing.
