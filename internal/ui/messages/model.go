@@ -56,10 +56,13 @@ type viewEntry struct {
 	linesNormal   []string
 	linesSelected []string
 	// linesSelectedShort is the selected variant with the short
-	// timestamp; nil when it equals linesSelected. Shown while a text
-	// selection exists: the drag overlay splices linesPlain (short form)
-	// into the displayed row by column, so the long header would garble.
+	// timestamp, shown while a text selection exists: the drag overlay
+	// splices linesPlain (short form) into the displayed row by column,
+	// so the long header would garble. Built on demand by selectedLines
+	// from shortSrc, the unmodified content, which is empty when the
+	// selected variant carries no long timestamp.
 	linesSelectedShort []string
+	shortSrc           string
 	linesPlain         []plainLine // column-aligned mirror of CONTENT (sans border)
 	// contentColOffset is the number of display columns at the START of each
 	// linesNormal[i] that belong to chrome (e.g. the thick left border ▌ on
@@ -1549,6 +1552,23 @@ type cacheStyles struct {
 	spacerLines  []string
 }
 
+// borderSelectStyle is the thick, tinted left border of the selected row.
+func (m *Model) borderSelectStyle() lipgloss.Style {
+	return lipgloss.NewStyle().
+		BorderStyle(thickLeftBorder).BorderLeft(true).
+		BorderForeground(styles.SelectionBorderColor(m.focused)).
+		BorderBackground(styles.SelectionTintColor(m.focused)).
+		Background(styles.SelectionTintColor(m.focused))
+}
+
+// selectedVariant renders content r as the selected row: the selection
+// tint repainted over inner spans, filled to the row width, then the
+// selection border. Split on "\n".
+func (m *Model) selectedVariant(r string, width int, borderSelect lipgloss.Style) []string {
+	fill := lipgloss.NewStyle().Background(styles.SelectionTintColor(m.focused)).Width(width - 1)
+	return strings.Split(borderSelect.Render(fill.Render(RepaintBgToSelectionTint(r, m.focused))), "\n")
+}
+
 // buildCacheStyles materializes the shared styles for a given width.
 // Also writes m.cacheSpacer / m.cacheMoreBelow as a side effect so
 // View()'s per-frame chrome rendering can reuse the same allocations.
@@ -1564,11 +1584,7 @@ type cacheStyles struct {
 func (m *Model) buildCacheStyles(width int) cacheStyles {
 	borderFill := lipgloss.NewStyle().Background(styles.Background)
 	borderInvis := lipgloss.NewStyle().BorderStyle(thickLeftBorder).BorderLeft(true).BorderForeground(styles.Background).BorderBackground(styles.Background)
-	borderSelect := lipgloss.NewStyle().
-		BorderStyle(thickLeftBorder).BorderLeft(true).
-		BorderForeground(styles.SelectionBorderColor(m.focused)).
-		BorderBackground(styles.SelectionTintColor(m.focused)).
-		Background(styles.SelectionTintColor(m.focused))
+	borderSelect := m.borderSelectStyle()
 	spacerBg := lipgloss.NewStyle().Background(styles.Background)
 	m.cacheSpacer = spacerBg.Width(width).Render("")
 	hintStyle := lipgloss.NewStyle().Background(styles.Background).Foreground(styles.TextMuted)
@@ -1701,15 +1717,14 @@ func (m *Model) renderMessageEntry(i int, width int, cs cacheStyles, stats *entr
 		bwT0 = time.Now()
 	}
 	filledNormal := cs.borderFill.Width(width - 1).Render(rendered)
-	selectedFill := lipgloss.NewStyle().Background(styles.SelectionTintColor(m.focused)).Width(width - 1)
-	selectedVariant := func(r string) []string {
-		return strings.Split(cs.borderSelect.Render(selectedFill.Render(RepaintBgToSelectionTint(r, m.focused))), "\n")
-	}
 	normal := cs.borderInvis.Render(filledNormal)
-	linesS := selectedVariant(renderedSel)
-	var linesSShort []string
+	linesS := m.selectedVariant(renderedSel, width, cs.borderSelect)
+	// The short-timestamp selected variant is built on demand from
+	// shortSrc (see selectedLines); building it here for every entry
+	// would double the fill+border cost of every cache build.
+	var shortSrc string
 	if renderedSel != rendered {
-		linesSShort = selectedVariant(rendered)
+		shortSrc = rendered
 	}
 	if stats != nil {
 		stats.borderWrapTotal += time.Since(bwT0)
@@ -1737,23 +1752,20 @@ func (m *Model) renderMessageEntry(i int, width int, cs cacheStyles, stats *entr
 	if i < len(m.messages)-1 {
 		linesN = append(linesN, cs.spacerLines...)
 		linesS = append(linesS, cs.spacerLines...)
-		if linesSShort != nil {
-			linesSShort = append(linesSShort, cs.spacerLines...)
-		}
 		linesP = append(linesP, plainLine{Text: "", Bytes: []int{0}})
 	}
 	return viewEntry{
-		linesNormal:        linesN,
-		linesSelected:      linesS,
-		linesSelectedShort: linesSShort,
-		linesPlain:         linesP,
-		contentColOffset:   1, // thick left border ▌ occupies column 0 of linesNormal
-		height:             len(linesN),
-		msgIdx:             i,
-		flushes:            attachFlushes,
-		sixelRows:          attachSixel,
-		imageHits:          attachHits,
-		reactionHits:       reactHits,
+		linesNormal:      linesN,
+		linesSelected:    linesS,
+		shortSrc:         shortSrc,
+		linesPlain:       linesP,
+		contentColOffset: 1, // thick left border ▌ occupies column 0 of linesNormal
+		height:           len(linesN),
+		msgIdx:           i,
+		flushes:          attachFlushes,
+		sixelRows:        attachSixel,
+		imageHits:        attachHits,
+		reactionHits:     reactHits,
 	}
 }
 
@@ -2866,11 +2878,21 @@ func (m *Model) ClearSelection() {
 // The drag overlay (applySelectionToRows) splices linesPlain, which holds
 // the short form, into the displayed row by column; the long header would
 // come out garbled.
-func (m *Model) selectedLines(e viewEntry) []string {
-	if m.hasSelection && e.linesSelectedShort != nil {
-		return e.linesSelectedShort
+//
+// The short variant is memoised into e, which must point into m.cache.
+func (m *Model) selectedLines(e *viewEntry) []string {
+	if !m.hasSelection || e.shortSrc == "" {
+		return e.linesSelected
 	}
-	return e.linesSelected
+	if e.linesSelectedShort == nil {
+		short := m.selectedVariant(e.shortSrc, m.cacheWidth, m.borderSelectStyle())
+		if len(short) > len(e.linesSelected) {
+			return e.linesSelected // unreachable: variants share a height
+		}
+		// Trailing spacer rows are shared by every variant.
+		e.linesSelectedShort = append(short, e.linesSelected[len(short):]...)
+	}
+	return e.linesSelectedShort
 }
 
 // HasSelection reports whether a selection is currently active or
@@ -3269,7 +3291,7 @@ func (m *Model) viewInternal(height, width int, applySelection bool) string {
 		}
 		var lines []string
 		if e.msgIdx == m.selected {
-			lines = m.selectedLines(e)
+			lines = m.selectedLines(&entries[i])
 		} else {
 			lines = e.linesNormal
 		}

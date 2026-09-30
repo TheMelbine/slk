@@ -205,6 +205,26 @@ func TestThreadSelectedTimestamp_DragOverParentHeaderKeepsTextIntact(t *testing.
 	}
 }
 
+// See messages TestSelectedTimestamp_ShortVariantBuiltLazily.
+func TestThreadSelectedTimestamp_ShortVariantBuiltLazily(t *testing.T) {
+	m, _ := threadLongTS(t, "priya", "lee", 80, 30)
+	for i, e := range m.cache {
+		if e.linesSelectedShort != nil {
+			t.Fatalf("reply %d built a short variant with no text selection", i)
+		}
+	}
+	y := m.chromeHeight + m.entryOffsets[len(m.entryOffsets)-1] - m.vp.YOffset()
+	m.BeginSelectionAt(y, 0)
+	m.ExtendSelectionAt(y, 8)
+	_ = m.View(30, 80)
+	m.MoveUp() // selection stays pinned; the cursor lands on sam
+	view := strings.Join(stripRows(m.View(30, 80)), "\n")
+	if !strings.Contains(view, "sam  3:41 PM") || strings.Contains(view, "Sep 29") {
+		t.Fatalf("j/k under a pinned selection should show the short form:\n%s", view)
+	}
+	assertThreadHeightsMatch(t, m)
+}
+
 func TestThreadSelectedTimestamp_CopyUsesShortForm(t *testing.T) {
 	m, _ := threadLongTS(t, "priya", "lee", 80, 30)
 	m.BeginSelectionAt(firstContentY(m), 0)

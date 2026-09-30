@@ -39,9 +39,11 @@ type viewEntry struct {
 	linesNormal   []string
 	linesSelected []string
 	// linesSelectedShort is the selected variant with the short
-	// timestamp; nil when it equals linesSelected. Shown while a text
-	// selection exists; see selectedLines.
+	// timestamp, shown while a text selection exists. Built on demand by
+	// selectedLines from shortSrc, the unmodified content, which is empty
+	// when the selected variant carries no long timestamp.
 	linesSelectedShort []string
+	shortSrc           string
 	linesPlain         []messages.PlainLine
 	height             int
 	replyIdx           int
@@ -1134,11 +1136,36 @@ func (m *Model) HasSelection() bool { return m.hasSelection }
 // The drag overlay splices linesPlain, which holds the short form, into
 // the displayed row by column; the long header would come out garbled.
 // Mirrors messages.Model.selectedLines.
-func (m *Model) selectedLines(e viewEntry) []string {
-	if m.hasSelection && e.linesSelectedShort != nil {
-		return e.linesSelectedShort
+//
+// The short variant is memoised into e, which must point into m.cache.
+func (m *Model) selectedLines(e *viewEntry, width int) []string {
+	if !m.hasSelection || e.shortSrc == "" {
+		return e.linesSelected
 	}
-	return e.linesSelected
+	if e.linesSelectedShort == nil {
+		short := m.selectedVariant(e.shortSrc, width, m.borderSelectStyle())
+		if len(short) != len(e.linesSelected) {
+			return e.linesSelected // unreachable: variants share a height
+		}
+		e.linesSelectedShort = short
+	}
+	return e.linesSelectedShort
+}
+
+// borderSelectStyle is the thick, tinted left border of the selected reply.
+func (m *Model) borderSelectStyle() lipgloss.Style {
+	return lipgloss.NewStyle().BorderStyle(thickLeftBorder).BorderLeft(true).
+		BorderForeground(styles.SelectionBorderColor(m.focused)).
+		BorderBackground(styles.SelectionTintColor(m.focused)).
+		Background(styles.SelectionTintColor(m.focused))
+}
+
+// selectedVariant renders content r as the selected reply: the selection
+// tint repainted over inner spans, filled to the row width, then the
+// selection border. Split on "\n". Mirrors messages.Model.selectedVariant.
+func (m *Model) selectedVariant(r string, width int, borderSelect lipgloss.Style) []string {
+	fill := lipgloss.NewStyle().Background(styles.SelectionTintColor(m.focused)).Width(width - 1)
+	return strings.Split(borderSelect.Render(fill.Render(messages.RepaintBgToSelectionTint(r, m.focused))), "\n")
 }
 
 // ScrollHintForDrag returns -1 if the cursor is within 1 row of the top
@@ -1578,10 +1605,7 @@ func (m *Model) View(height, width int) string {
 		borderFill := lipgloss.NewStyle().Background(styles.Background)
 		borderInvis := lipgloss.NewStyle().BorderStyle(thickLeftBorder).BorderLeft(true).
 			BorderForeground(styles.Background).BorderBackground(styles.Background)
-		borderSelect := lipgloss.NewStyle().BorderStyle(thickLeftBorder).BorderLeft(true).
-			BorderForeground(styles.SelectionBorderColor(m.focused)).
-			BorderBackground(styles.SelectionTintColor(m.focused)).
-			Background(styles.SelectionTintColor(m.focused))
+		borderSelect := m.borderSelectStyle()
 		for i, reply := range m.replies {
 			// renderThreadMessage's last arg ("isSelected") drives reaction-
 			// nav pill highlighting (lines 1040, 1049): when reaction nav
@@ -1605,23 +1629,19 @@ func (m *Model) View(height, width int) string {
 			// escapes (Username, Timestamp, MessageText, RenderSlackMarkdown's
 			// reset-reapplications) with the tint color so the tint reaches
 			// every cell of the row, not just the trailing whitespace.
-			selectedFill := lipgloss.NewStyle().
-				Background(styles.SelectionTintColor(m.focused)).
-				Width(width - 1)
-			selectedVariant := func(r string) []string {
-				return strings.Split(borderSelect.Render(selectedFill.Render(messages.RepaintBgToSelectionTint(r, m.focused))), "\n")
-			}
 			normal := borderInvis.Render(filledNormal)
 			linesN := strings.Split(normal, "\n")
-			linesS := selectedVariant(renderedSel)
-			var linesSShort []string
+			linesS := m.selectedVariant(renderedSel, width, borderSelect)
+			// The short-timestamp selected variant is built on demand
+			// from shortSrc (see selectedLines).
+			var shortSrc string
 			if renderedSel != rendered {
-				linesSShort = selectedVariant(rendered)
+				shortSrc = rendered
 			}
 			m.cache = append(m.cache, viewEntry{
-				linesNormal:        linesN,
-				linesSelected:      linesS,
-				linesSelectedShort: linesSShort,
+				linesNormal:   linesN,
+				linesSelected: linesS,
+				shortSrc:      shortSrc,
 				// linesPlain mirrors the UNBORDERED, UNTINTED content (filledNormal)
 				// so the thick left-border column is NOT present in plain text and
 				// never bleeds into clipboard output via SelectionText. The
@@ -1781,7 +1801,7 @@ func (m *Model) View(height, width int) string {
 			var lines []string
 			if i == m.selected {
 				startLine = currentLine
-				lines = m.selectedLines(e)
+				lines = m.selectedLines(&m.cache[i], width)
 			} else {
 				lines = e.linesNormal
 			}

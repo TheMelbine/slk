@@ -189,6 +189,29 @@ func TestSelectedTimestamp_SelectionToggleBumpsVersion(t *testing.T) {
 	}
 }
 
+// The short-form selected variant is only ever drawn for the selected row
+// while a text selection exists, so building it for every entry on every
+// cache build is waste (it roughly doubles the fill+border cost). It is
+// built on demand, and j/k while a selection is pinned must still get it.
+func TestSelectedTimestamp_ShortVariantBuiltLazily(t *testing.T) {
+	m, _ := longTSModel(t, longTSItems(), 80)
+	for i, e := range m.cache {
+		if e.linesSelectedShort != nil {
+			t.Fatalf("entry %d built a short variant with no text selection", i)
+		}
+	}
+	y := selectedHeaderY(t, m)
+	m.BeginSelectionAt(y, 0)
+	m.ExtendSelectionAt(y, 8)
+	_ = m.View(40, 80)
+	m.MoveUp() // selection stays pinned; the cursor lands on sam
+	view := ansi.Strip(m.View(40, 80))
+	if !strings.Contains(view, "sam  3:41 PM") || strings.Contains(view, "Sep 29") {
+		t.Fatalf("j/k under a pinned selection should show the short form:\n%s", view)
+	}
+	assertHeightsMatch(t, m)
+}
+
 func TestSelectedTimestamp_CopyUsesShortForm(t *testing.T) {
 	m, _ := longTSModel(t, longTSItems(), 80)
 	m.BeginSelectionAt(m.chromeHeight, 0)
