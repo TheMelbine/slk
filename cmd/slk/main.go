@@ -82,7 +82,7 @@ func main() {
 			printHelp()
 			return
 		case "--add-workspace":
-			if err := addWorkspace(); err != nil {
+			if err := addWorkspace(len(os.Args) > 2 && os.Args[2] == "--browser"); err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
 			}
@@ -175,6 +175,8 @@ func printHelp() {
 Usage:
   slk                    Launch the TUI
   slk --add-workspace     Add a Slack workspace (interactive)
+  slk --add-workspace --browser
+                          Add one from a browser session (no desktop app)
   slk --remove-workspace  Remove a configured workspace (interactive)
   slk --list-workspaces   List configured workspaces (TeamID, Slug, Name)
   slk --dump-sections     Dump raw users.channelSections.list JSON (diagnostic)
@@ -271,7 +273,7 @@ func run() error {
 	tokens, err := tokenStore.List()
 	if err != nil || len(tokens) == 0 {
 		// No workspaces configured -- launch onboarding automatically
-		if err := addWorkspace(); err != nil {
+		if err := addWorkspace(false); err != nil {
 			return err
 		}
 		// Reload tokens after onboarding

@@ -13,20 +13,40 @@ import (
 	"github.com/gammons/slk/internal/slackdesktop"
 )
 
-func addWorkspace() error {
+// onboardingStyles are the lipgloss styles shared by the desktop and the
+// browser sign-in flows.
+type onboardingStyles struct {
+	title, subtitle, step, success, errorText, dim lipgloss.Style
+}
+
+func newOnboardingStyles() onboardingStyles {
+	return onboardingStyles{
+		title:     lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#4A9EFF")).MarginBottom(1),
+		subtitle:  lipgloss.NewStyle().Foreground(lipgloss.Color("#888888")).MarginBottom(1),
+		step:      lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#50C878")),
+		success:   lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#50C878")).MarginTop(1),
+		errorText: lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#E04040")),
+		dim:       lipgloss.NewStyle().Foreground(lipgloss.Color("#666666")),
+	}
+}
+
+// addWorkspace signs in through the Slack desktop app. When that session
+// cannot be read (no desktop app, no keyring, ...) and stdin is a terminal, it
+// offers the browser-session flow instead. forceBrowser skips the desktop app.
+func addWorkspace(forceBrowser bool) error {
 	dataDir := xdgData()
 	tokenDir := filepath.Join(dataDir, "tokens")
 	tokenStore := slackclient.NewTokenStore(tokenDir)
 
-	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#4A9EFF")).MarginBottom(1)
-	subtitleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#888888")).MarginBottom(1)
-	stepStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#50C878"))
-	successStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#50C878")).MarginTop(1)
-	errorStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#E04040"))
-	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#666666"))
+	st := newOnboardingStyles()
+	titleStyle, subtitleStyle, stepStyle := st.title, st.subtitle, st.step
+	successStyle, errorStyle, dimStyle := st.success, st.errorText, st.dim
 
 	fmt.Println()
 	fmt.Println(titleStyle.Render("slk -- Add Workspace"))
+	if forceBrowser {
+		return addWorkspaceFromBrowser(tokenStore, st)
+	}
 	fmt.Println(subtitleStyle.Render("Reading your signed-in workspaces from the Slack desktop app."))
 	fmt.Println()
 
@@ -34,12 +54,12 @@ func addWorkspace() error {
 	cookie, err := slackdesktop.Cookie()
 	if err != nil {
 		fmt.Println(errorStyle.Render("  " + desktopErrorMessage(err)))
-		return err
+		return offerBrowserFallback(tokenStore, st, err)
 	}
 	workspaces, err := slackdesktop.Workspaces()
 	if err != nil {
 		fmt.Println(errorStyle.Render("  " + desktopErrorMessage(err)))
-		return err
+		return offerBrowserFallback(tokenStore, st, err)
 	}
 
 	// Multi-select (all pre-selected).
@@ -99,23 +119,30 @@ func addWorkspace() error {
 			fmt.Println(errorStyle.Render(fmt.Sprintf("  %s: authentication failed: %v", tok.TeamName, err)))
 			return fmt.Errorf("authentication failed for %s: %w", tok.TeamName, err)
 		}
-		if err := tokenStore.Save(tok); err != nil {
-			return fmt.Errorf("saving token for %s: %w", tok.TeamName, err)
+		if err := saveWorkspace(tokenStore, tok, st); err != nil {
+			return err
 		}
-
-		// Append a [workspaces.<slug>] config block (best-effort).
-		configPath := filepath.Join(xdgConfig(), "config.toml")
-		slug := uniqueSlug(config.Slugify(tok.TeamName), existingSlugs(configPath))
-		if err := appendWorkspaceConfigBlock(configPath, slug, tok.TeamID, tok.TeamName); err != nil {
-			fmt.Println(dimStyle.Render("  Note: could not write config.toml: " + err.Error()))
-		}
-		fmt.Println(successStyle.Render("  Added ") + dimStyle.Render(tok.TeamName))
 	}
 
 	fmt.Println()
 	fmt.Println(successStyle.Render(fmt.Sprintf("  %d workspace(s) added!", len(tokens))))
 	fmt.Println(dimStyle.Render("  Run ") + lipgloss.NewStyle().Bold(true).Render("slk") + dimStyle.Render(" to start."))
 	fmt.Println()
+	return nil
+}
+
+// saveWorkspace persists a validated token and appends its
+// [workspaces.<slug>] config block (best-effort).
+func saveWorkspace(tokenStore *slackclient.TokenStore, tok slackclient.Token, st onboardingStyles) error {
+	if err := tokenStore.Save(tok); err != nil {
+		return fmt.Errorf("saving token for %s: %w", tok.TeamName, err)
+	}
+	configPath := filepath.Join(xdgConfig(), "config.toml")
+	slug := uniqueSlug(config.Slugify(tok.TeamName), existingSlugs(configPath))
+	if err := appendWorkspaceConfigBlock(configPath, slug, tok.TeamID, tok.TeamName); err != nil {
+		fmt.Println(st.dim.Render("  Note: could not write config.toml: " + err.Error()))
+	}
+	fmt.Println(st.success.Render("  Added ") + st.dim.Render(tok.TeamName))
 	return nil
 }
 
