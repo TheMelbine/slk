@@ -27,6 +27,10 @@ selection with `j`/`k` (or clicking) moves the long timestamp with it.
   there too.
 - The time part is `msg.Timestamp` unchanged, so the user's
   `timestamp_format` still governs it. Only a date prefix is added.
+- **Except while a mouse text selection exists** in that pane (during a
+  drag, and while the finished selection stays pinned until cleared):
+  the selected row then shows the short timestamp. See "Amendment:
+  text selection" below.
 
 ### Format
 
@@ -105,8 +109,9 @@ to the long timestamp like any other span:
 - `messages.Model.renderMessageEntry`: `renderedSel :=
   SelectedHeader(rendered, …)`; `renderedTinted` is derived from
   `renderedSel` instead of `rendered`. `linesNormal` and `linesPlain`
-  still derive from the unmodified `rendered`, so clipboard text and
-  mouse→column mapping are unchanged.
+  still derive from the unmodified `rendered`, so clipboard text is
+  unchanged. (Mouse→column mapping is *not* unchanged on the selected
+  row while it shows the long form; see "Amendment: text selection".)
 - `thread.Model` reply cache loop: same change at the same point.
 - `thread.Model` parent: rendered outside the cache with
   `parentIsSelected`; apply `SelectedHeader` when `parentIsSelected`,
@@ -123,13 +128,40 @@ rather than recomputing, so the fit check uses exactly what was rendered.
 - `len(linesSelected) == len(linesNormal)` for every entry (enforced by
   the width fallback; asserted in tests).
 - Plain text / clipboard / text selection read the short form. The long
-  form is display-only.
+  form is display-only, and is not displayed while a text selection
+  exists.
 - No I/O, no new service calls: everything derives from `msg.TS`,
   already on every `MessageItem`.
 - `internal/ui/thread/lockstep_test.go` compares the two panes in one
   static state; both change identically, so it should still pass. If it
   compares selected rows and the thread parent differs, update the
   divergence list rather than forcing a match.
+
+### Amendment: text selection (found during implementation)
+
+The mouse drag-selection overlay (`messages.Model.applySelectionToRows`
+and its thread twin) builds each highlighted row by cutting the
+*displayed* row at columns taken from `linesPlain` and splicing in
+`linesPlain` text. That requires the displayed row and its plain mirror
+to be column-aligned. With the long form on screen and the short form in
+`linesPlain`, dragging across the selected header garbled it
+(`bob  9:00 AM` → `bob  Sun  AM`). A press also moves the selection
+cursor to the clicked message, so nearly every drag crosses that row.
+
+Resolution (chosen over "put the date after the time" and "copy the long
+form"): while `hasSelection`, the selected row draws a short-timestamp
+selected variant, i.e. exactly today's row, so the overlay, the format and
+the short-form clipboard all stay as specified.
+
+- Each entry keeps its unmodified content (`shortSrc`) when the selected
+  variant carries the long form; `selectedLines` renders
+  `linesSelectedShort` from it on first use and memoises it. Building it
+  eagerly for every entry made full cache builds ~45–100% slower.
+- The thread parent skips `SelectedHeader` while `hasSelection`; the
+  thread view cache key includes `hasSelection`.
+- `messages.Model` bumps `Version()` on `hasSelection` transitions only
+  (begin from none, empty end, clear), so the App's bordered-render
+  cache re-renders once per drag, never per cell of motion.
 
 ## Testing
 

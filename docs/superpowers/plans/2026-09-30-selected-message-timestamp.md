@@ -40,7 +40,7 @@ by each renderer as `headerBudget`. Pinned by Review Focus item 1.
 4. **Focus flip re-renders only the selected slot via `partialRebuild`**: the unfocused selection must still show the long form. Test: `TestSelectedTimestamp_UnfocusedStillLong` (Task 2).
 5. **Selected thread parent too wide for the pane**: the parent is not width-filled, so an overflowing header would be wrapped by the outer pane style and push the pane past its height. Must fall back; every pane row stays exactly `width` wide. Test: `TestThreadSelectedTimestamp_NarrowParentFallsBack` (Task 3).
 
-Known, accepted by the spec (not a bug to fix here): during a mouse drag over the selected row's header, the highlight is painted over the long text but the clipboard receives the short form, because `linesPlain` is built from the unmodified render.
+~~Known, accepted by the spec: during a mouse drag over the selected row's header, the highlight is painted over the long text but the clipboard receives the short form.~~ Wrong: the overlay splices `linesPlain` into the displayed row by column, so the header was garbled. Caught in Task 4 by `TestGolden_DragSelectionIsActuallySelected`; resolved by showing the short form while a text selection exists. See the spec's "Amendment: text selection" and the ledger.
 
 ---
 
