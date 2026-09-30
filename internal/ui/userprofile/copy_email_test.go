@@ -6,11 +6,41 @@ import (
 	"time"
 
 	"github.com/charmbracelet/x/ansi"
+	"github.com/rivo/uniseg"
 
 	"github.com/gammons/slk/internal/core"
 	"github.com/gammons/slk/internal/emoji"
 	"github.com/gammons/slk/internal/ui/peerstatus"
 )
+
+// The 📋 is written as literal text (never swapped for a kitty image
+// placement), so the terminal draws it at its Unicode width even when
+// emoji image mode reserves 1 cell per emoji. Positions here are
+// measured with uniseg, the terminal's own view, not emoji.Width.
+func TestClickAt_ImageModeOneCellUsesDrawnWidth(t *testing.T) {
+	emoji.SetImageMode(true, 1)
+	t.Cleanup(func() { emoji.SetImageMode(false, 2) })
+
+	m := loadedWithEmail("priya@example.com")
+	lines := boxLines(ansi.Strip(m.ViewOverlay(80, 24, "", Live{Now: time.Now()})))
+	y, x := -1, -1
+	for i, l := range lines {
+		if strings.Contains(l, "Email") {
+			y, x = i, uniseg.StringWidth(l[:strings.Index(l, CopyIcon)])
+		}
+		if w := uniseg.StringWidth(l); w != 56 {
+			t.Errorf("row %d drawn %d cells wide, want 56: %q", i, w, l)
+		}
+	}
+	if y < 0 {
+		t.Fatal("no Email row")
+	}
+	for dx := 0; dx < uniseg.StringWidth(CopyIcon); dx++ {
+		if !m.ClickAt(80, 24, x+dx, y) {
+			t.Errorf("ClickAt(%d, %d) = false on drawn icon cell %d", x+dx, y, dx)
+		}
+	}
+}
 
 // loadedWithEmail returns an open modal whose fetch has returned email.
 func loadedWithEmail(email string) *Model {

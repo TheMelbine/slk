@@ -60,8 +60,14 @@ func (m *Model) ClickAt(termW, termH, x, y int) bool {
 	if l.iconRow < 0 || y != l.iconRow {
 		return false
 	}
-	return x >= l.iconCol && x < l.iconCol+slkemoji.Width(CopyIcon)
+	return x >= l.iconCol && x < l.iconCol+drawnWidth(CopyIcon)
 }
+
+// drawnWidth is the width the terminal draws s at. The copy icon is
+// written as literal text, never swapped for a kitty image placement, so
+// emoji.Width's image-mode footprint (emoji_cells may be 1) would not
+// match what is on screen.
+func drawnWidth(s string) int { return lipgloss.Width(s) }
 
 // ViewOverlay composites the modal onto background. Returns background
 // unchanged when hidden.
@@ -363,12 +369,14 @@ func (m *Model) detailRows(innerW int, live Live) (rows []string, emailIdx, icon
 		addRow("Local time", formatLocalTime(live.Now, m.profile.TZOffset, m.profile.TZAbbrev))
 	}
 	if email := m.profile.Email; email != "" {
-		suffix := " " + CopyIcon
-		head := fit(padLabel("Email", detailLabelWidth)+email, innerW-slkemoji.Width(suffix))
+		iconW := drawnWidth(CopyIcon)
+		head := fit(padLabel("Email", detailLabelWidth)+email, innerW-1-iconW)
 		if head != "" {
+			headW := drawnWidth(head)
 			emailIdx = len(rows)
-			iconCol = slkemoji.Width(head) + 1
-			rows = append(rows, valueStyle.Render(padLeftTo(head+suffix, innerW)))
+			iconCol = headW + 1
+			pad := strings.Repeat(" ", max(0, innerW-headW-1-iconW))
+			rows = append(rows, valueStyle.Render(head+" "+CopyIcon+pad))
 		} else {
 			// Too narrow for the icon: plain row, nothing to click.
 			addRow("Email", email)
