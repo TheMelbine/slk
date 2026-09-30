@@ -37,10 +37,10 @@ with only as many rows as it needs:
 │ 🔕 Do not disturb until 5:00 PM                │
 │                                                │
 │ Local time  3:42 PM (PDT, −3h from you)        │
-│ Email       priya@example.com                  │
+│ Email       priya@example.com 📋               │
 │ Phone       +1 555 0100                        │
 │                                                │
-│                              K / esc / q close │
+│               e copy email · K / esc / q close │
 ╰────────────────────────────────────────────────╯
 ```
 
@@ -71,6 +71,14 @@ with only as many rows as it needs:
 - **Details:** local time, email and phone, from the fetch. While loading
   they appear as one `Loading profile…` line, and after a failure as
   one error line (see Errors). Empty fields are left out, not shown as `—`.
+- **Copy email:** a loaded, non-empty email ends in `📋`, and the footer
+  reads `e copy email · K / esc / q close`. `e`, or a click on the icon,
+  copies the address through `App.clipboardWrite`, toasts `Copied email`
+  and leaves the dialog open. With no email (still loading, failed, or
+  none on the profile) there is no icon, the footer is the plain one, and
+  `e` toasts `No email to copy`. A long address is truncated before the
+  icon so the icon always fits; a click anywhere else inside the box is a
+  no-op, and a click outside closes it.
 - **Local time:** the author's wall clock from `users.info`'s `tz_offset`,
   with the zone abbreviation (`PDT`) when there is one — derived in
   `cmd/slk` from the IANA `tz` name via `time.LoadLocation`; numeric
