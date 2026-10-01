@@ -935,3 +935,16 @@ func TestRepaintBgToSelectionTintBackwardCompat(t *testing.T) {
 		t.Errorf("pass-through: got %q, want %q", got, noBg)
 	}
 }
+
+// A PromQL `=~` put two `~` inside one URL; strikethrough used to match
+// across them, which broke the <url|label> token and printed the raw URL.
+func TestRenderSlackMarkdown_TildesInsideLinkURL(t *testing.T) {
+	in := "see <https://grafana.example/explore?expr=a%7Bfs%3D~%5C%22xfs%5C%22%7D+%2F+b%7Bfs%3D~%5C%22xfs%5C%22%7D|Open in Grafana> now"
+	out := ansi.Strip(RenderSlackMarkdown(in, nil, nil))
+	if strings.Contains(out, "grafana.example") || strings.Contains(out, "%7B") {
+		t.Fatalf("raw URL leaked into visible text: %q", out)
+	}
+	if !strings.Contains(out, "see Open in Grafana now") {
+		t.Fatalf("label missing: %q", out)
+	}
+}

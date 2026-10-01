@@ -727,9 +727,52 @@ func RenderSlackMarkdownWith(text string, opts RenderSlackMarkdownOpts) string {
 	return output
 }
 
+// protectLinks replaces every <url|label> and <url> token in text with a
+// placeholder built from render, so the bold/italic/strikethrough passes
+// cannot match markers inside a URL: a PromQL `=~` in a Grafana link
+// put two `~` in one URL, struck out its middle and left the raw URL on
+// screen. restore puts the rendered links back.
+func protectLinks(text string, render func(url, label string, labeled bool) string) (protected string, restore func(string) string) {
+	var rendered []string
+	stash := func(out string) string {
+		rendered = append(rendered, out)
+		return fmt.Sprintf("\x00LK%d\x00", len(rendered)-1)
+	}
+	text = linkWithLabelRe.ReplaceAllStringFunc(text, func(match string) string {
+		parts := linkWithLabelRe.FindStringSubmatch(match)
+		return stash(render(parts[1], parts[2], true))
+	})
+	text = linkBareRe.ReplaceAllStringFunc(text, func(match string) string {
+		return stash(render(linkBareRe.FindStringSubmatch(match)[1], "", false))
+	})
+	return text, func(out string) string {
+		for i, r := range rendered {
+			out = strings.Replace(out, fmt.Sprintf("\x00LK%d\x00", i), r, 1)
+		}
+		return out
+	}
+}
+
 func renderInlineFormattingWith(text string, opts RenderSlackMarkdownOpts) string {
 	userNames := opts.UserNames
 	channelNames := opts.ChannelNames
+	// Links with labels: <url|label> -> just the label, wrapped in an OSC 8
+	// hyperlink escape so it's clickable in modern terminals. We don't
+	// append the raw URL: every terminal slk targets supports OSC 8 (or its
+	// own URL auto-detection / shift-click), and the trailing "(url)"
+	// duplicated noise on every labeled link.
+	//
+	// Bare links: <url> -> url, wrapped in OSC 8 so it's clickable.
+	// For mailto: URLs the visible text drops the scheme prefix so the
+	// user sees just the email address; the OSC 8 target keeps the
+	// mailto: scheme so terminal click-handlers can open a mail client.
+	text, restoreLinks := protectLinks(text, func(url, label string, labeled bool) string {
+		if !labeled {
+			label = strings.TrimPrefix(url, "mailto:")
+		}
+		return osc8Hyperlink(url, linkStyle().Render(label))
+	})
+
 	// Inline code (before bold/italic to avoid conflicts inside code)
 	text = inlineCodeRe.ReplaceAllStringFunc(text, func(match string) string {
 		inner := inlineCodeRe.FindStringSubmatch(match)[1]
@@ -756,26 +799,7 @@ func renderInlineFormattingWith(text string, opts RenderSlackMarkdownOpts) strin
 		return strikethroughStyle().Render(inner)
 	})
 
-	// Links with labels: <url|label> -> just the label, wrapped in an OSC 8
-	// hyperlink escape so it's clickable in modern terminals. We don't
-	// append the raw URL: every terminal slk targets supports OSC 8 (or its
-	// own URL auto-detection / shift-click), and the trailing "(url)"
-	// duplicated noise on every labeled link.
-	text = linkWithLabelRe.ReplaceAllStringFunc(text, func(match string) string {
-		parts := linkWithLabelRe.FindStringSubmatch(match)
-		url, label := parts[1], parts[2]
-		return osc8Hyperlink(url, linkStyle().Render(label))
-	})
-
-	// Bare links: <url> -> url, wrapped in OSC 8 so it's clickable.
-	// For mailto: URLs the visible text drops the scheme prefix so the
-	// user sees just the email address; the OSC 8 target keeps the
-	// mailto: scheme so terminal click-handlers can open a mail client.
-	text = linkBareRe.ReplaceAllStringFunc(text, func(match string) string {
-		url := linkBareRe.FindStringSubmatch(match)[1]
-		visible := strings.TrimPrefix(url, "mailto:")
-		return osc8Hyperlink(url, linkStyle().Render(visible))
-	})
+	text = restoreLinks(text)
 
 	// Date tokens: <!date^TS^FORMAT|FALLBACK> -> FALLBACK. Done before
 	// channel/user mentions; the token never contains <#/<@ forms.
@@ -971,20 +995,18 @@ func SlackMrkdwnToCommonMarkWithUserGroups(text string, userNames map[string]str
 // slackMrkdwnToCommonMarkInline converts inline Slack formatting tokens
 // to their CommonMark equivalents without any ANSI styling.
 func slackMrkdwnToCommonMarkInline(text string, userNames map[string]string, channelNames map[string]string, userGroups map[string]string) string {
+	text, restoreLinks := protectLinks(text, func(url, label string, labeled bool) string {
+		if !labeled {
+			return strings.TrimPrefix(url, "mailto:")
+		}
+		return "[" + label + "](" + url + ")"
+	})
+
 	text = boldRe.ReplaceAllString(text, "**$1**")
 
 	text = strikethroughRe.ReplaceAllString(text, "~~$1~~")
 
-	text = linkWithLabelRe.ReplaceAllStringFunc(text, func(match string) string {
-		parts := linkWithLabelRe.FindStringSubmatch(match)
-		url, label := parts[1], parts[2]
-		return "[" + label + "](" + url + ")"
-	})
-
-	text = linkBareRe.ReplaceAllStringFunc(text, func(match string) string {
-		url := linkBareRe.FindStringSubmatch(match)[1]
-		return strings.TrimPrefix(url, "mailto:")
-	})
+	text = restoreLinks(text)
 
 	text = channelMentionRe.ReplaceAllStringFunc(text, func(match string) string {
 		groups := channelMentionRe.FindStringSubmatch(match)
