@@ -2260,7 +2260,7 @@ func (m *Model) renderMessagePlain(msg MessageItem, width int, avatarStr string,
 	// contentColBase is the display column at which message content
 	// begins inside the cached entry's linesNormal. buildCache wraps
 	// the rendered content with a thick-left-border (▌, 1 col) at
-	// column 0; placeAvatarBeside (when an avatar is present) prepends
+	// column 0; PlaceAvatarBeside (when an avatar is present) prepends
 	// 4 cols of avatar + 1 col of spacing in front of every content
 	// row. So the in-content column 0 lands at:
 	//
@@ -2385,7 +2385,7 @@ func (m *Model) renderMessagePlain(msg MessageItem, width int, avatarStr string,
 		// Each line is also PREFIXED with the background, not just
 		// patched after its own resets. The reset that strips the
 		// background is not in these lines at all — it closes the
-		// avatar gutter that placeAvatarBeside prepends to every line
+		// avatar gutter that PlaceAvatarBeside prepends to every line
 		// afterwards, so the run at the start of the content has no
 		// preceding reset here to attach a background to.
 		bkBlock = "\n" + WithBackground(bkLines, BgANSI())
@@ -2454,7 +2454,7 @@ func (m *Model) renderMessagePlain(msg MessageItem, width int, avatarStr string,
 	//   preAttachmentRows = broadcast + username + body + bk
 	//   + attachmentLineCount (each attachment line is 1 row)
 	//   + 1 if threadLine is present
-	// (placeAvatarBeside does not change row counts.)
+	// (PlaceAvatarBeside does not change row counts.)
 	if len(pillSpecs) > 0 && reactionLineCount > 0 {
 		reactionRowBase := preAttachmentRows + attachmentLineCount
 		if threadLine != "" {
@@ -2475,7 +2475,7 @@ func (m *Model) renderMessagePlain(msg MessageItem, width int, avatarStr string,
 	// Place avatar next to message content (avatar is side-by-side, no
 	// extra rows; row indices for sixelRows remain valid).
 	if avatarStr != "" {
-		msgContent = placeAvatarBeside(avatarStr, msgContent)
+		msgContent = PlaceAvatarBeside(avatarStr, msgContent)
 	}
 
 	if len(allSixel) == 0 {
@@ -2501,9 +2501,9 @@ func (m *Model) renderMessagePlain(msg MessageItem, width int, avatarStr string,
 	return msgContent, append(allFlushes, flushes...), allSixel, hits, reactionHits
 }
 
-// placeAvatarBeside renders the avatar to the left of the message content.
+// PlaceAvatarBeside renders the avatar to the left of the message content.
 // The avatar is 4 cols wide, 2 rows tall. Message content flows to the right.
-func placeAvatarBeside(avatar, content string) string {
+func PlaceAvatarBeside(avatar, content string) string {
 	avatarLines := strings.Split(avatar, "\n")
 	contentLines := strings.Split(content, "\n")
 

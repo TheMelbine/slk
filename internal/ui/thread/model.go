@@ -1979,7 +1979,15 @@ func (m *Model) blockkitContext(msg messages.MessageItem, userNames, channelName
 func (m *Model) renderThreadMessage(msg messages.MessageItem, width int, userNames map[string]string, channelNames map[string]string, isSelected bool) (string, []func(io.Writer) error, []reactionEntryHit) {
 	line := styles.Username(msg.UserID, m.coloredUsernames).Render(msg.UserName) + messages.AuthorStatusSuffix(m.userStatuses, msg.UserID, time.Now()) + lipgloss.NewStyle().Background(styles.Background).Render("  ") + styles.Timestamp.Render(msg.Timestamp)
 
+	// Avatar column on the left, same layout as the channel pane.
+	avatarStr := ""
+	if m.avatarFn != nil {
+		avatarStr = m.avatarFn(msg.UserID)
+	}
 	contentWidth := width - 4
+	if avatarStr != "" {
+		contentWidth = width - 7 // 4 cols avatar + 1 space + 2 padding
+	}
 	if contentWidth < 20 {
 		contentWidth = 20
 	}
@@ -2219,7 +2227,10 @@ func (m *Model) renderThreadMessage(msg messages.MessageItem, width int, userNam
 	// (so contentColBase = 1); it adds no rows.
 	var reactionHits []reactionEntryHit
 	if len(pillSpecs) > 0 && reactionLineCount > 0 {
-		const contentColBase = 1 // thick left border occupies col 0 of linesNormal
+		contentColBase := 1 // thick left border occupies col 0 of linesNormal
+		if avatarStr != "" {
+			contentColBase += 5 // avatar + gap
+		}
 		reactionRowBase := 1 + bodyRows + bkLineCount + attachmentLineCount
 		for _, ps := range pillSpecs {
 			row := reactionRowBase + ps.lineIdx
@@ -2233,5 +2244,9 @@ func (m *Model) renderThreadMessage(msg messages.MessageItem, width int, userNam
 		}
 	}
 
-	return line + bodyRow + bkBlock + attachmentLines + reactionLine, flushes, reactionHits
+	content := line + bodyRow + bkBlock + attachmentLines + reactionLine
+	if avatarStr != "" {
+		content = messages.PlaceAvatarBeside(avatarStr, content)
+	}
+	return content, flushes, reactionHits
 }

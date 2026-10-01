@@ -1059,3 +1059,17 @@ func TestScrollAnchorInsideParentPrefixNotPreservedAcrossWidthResize(t *testing.
 		t.Fatalf("expected the known limitation (jump into a reply) to still reproduce; if this now fails, #254 was fixed -- replace this test with a real preservation assertion")
 	}
 }
+
+func TestThreadRendersAvatarsBesideMessages(t *testing.T) {
+	m := New()
+	m.SetAvatarFunc(func(userID string) string { return "AV" + userID[1:] + "\nav" + userID[1:] })
+	parent := messages.MessageItem{TS: "1700000000.000000", UserID: "U1", UserName: "alice", Text: "parent"}
+	reply := messages.MessageItem{TS: "1700000001.000000", UserID: "U2", UserName: "bob", Text: "reply"}
+	m.SetThread(parent, []messages.MessageItem{reply}, "C1", parent.TS)
+	got := ansi.Strip(m.View(30, 60))
+	for _, want := range []string{"AV1 alice", "av1 parent", "AV2 bob", "av2 reply"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in:\n%s", want, got)
+		}
+	}
+}
