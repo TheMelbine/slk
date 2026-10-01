@@ -25,19 +25,22 @@ func TestNoteReplyUser(t *testing.T) {
 
 func TestLastReplyLabel(t *testing.T) {
 	now := time.Date(2026, 10, 2, 15, 0, 0, 0, time.Local)
-	ts := func(t time.Time) string { return strconv.FormatInt(t.Unix(), 10) + ".000100" }
+	ts := func(d time.Duration) string { return strconv.FormatInt(now.Add(-d).Unix(), 10) + ".000100" }
 	cases := []struct {
-		at   time.Time
+		ago  time.Duration
 		want string
 	}{
-		{time.Date(2026, 10, 2, 9, 5, 0, 0, time.Local), "today at 9:05 AM"},
-		{time.Date(2026, 10, 1, 23, 50, 0, 0, time.Local), "yesterday at 11:50 PM"},
-		{time.Date(2026, 9, 3, 12, 0, 0, 0, time.Local), "on Sep 3"},
-		{time.Date(2025, 12, 31, 12, 0, 0, 0, time.Local), "on Dec 31, 2025"},
+		{20 * time.Second, "just now"},
+		{time.Minute, "1 minute ago"},
+		{59 * time.Minute, "59 minutes ago"},
+		{2*time.Hour + 50*time.Minute, "2 hours ago"},
+		{49 * time.Hour, "2 days ago"},
+		{70 * 24 * time.Hour, "2 months ago"},
+		{400 * 24 * time.Hour, "1 year ago"},
 	}
 	for _, c := range cases {
-		if got := lastReplyLabel(ts(c.at), now); got != c.want {
-			t.Errorf("lastReplyLabel(%v) = %q, want %q", c.at, got, c.want)
+		if got := lastReplyLabel(ts(c.ago), now); got != c.want {
+			t.Errorf("lastReplyLabel(-%v) = %q, want %q", c.ago, got, c.want)
 		}
 	}
 	if got := lastReplyLabel("", now); got != "" {
@@ -56,7 +59,7 @@ func TestRenderThreadLine(t *testing.T) {
 		return "[" + uid + "]"
 	}
 	got := ansi.Strip(renderThreadLine(msg, mini, now))
-	want := "[U1] [U3] [U4] 5 replies  Last reply today at 2:30 PM"
+	want := "[U1] [U3] [U4] 5 replies  Last reply 30 minutes ago"
 	if got != want {
 		t.Fatalf("got %q\nwant %q", got, want)
 	}
@@ -71,5 +74,24 @@ func TestIncrementReplyCountTracksLatestReplier(t *testing.T) {
 	got := m.messages[0]
 	if got.ReplyCount != 2 || strings.Join(got.ReplyUsers, ",") != "U2,U1" || got.LatestReply != "100.000009" {
 		t.Fatalf("after reply: count=%d users=%v latest=%s", got.ReplyCount, got.ReplyUsers, got.LatestReply)
+	}
+}
+
+func TestRefreshReplyAges_RerendersLabel(t *testing.T) {
+	now := time.Date(2026, 10, 2, 15, 0, 0, 0, time.Local)
+	SetNowFunc(func() time.Time { return now })
+	t.Cleanup(func() { SetNowFunc(nil) })
+	latest := strconv.FormatInt(now.Add(-5*time.Minute).Unix(), 10) + ".000100"
+	m := New([]MessageItem{{TS: "1790000000.000100", UserName: "a", Text: "hi", ReplyCount: 2, LatestReply: latest}}, "general")
+	if v := ansi.Strip(m.View(20, 80)); !strings.Contains(v, "Last reply 5 minutes ago") {
+		t.Fatalf("initial label missing:\n%s", v)
+	}
+	now = now.Add(2 * time.Hour)
+	if v := ansi.Strip(m.View(20, 80)); !strings.Contains(v, "5 minutes ago") {
+		t.Fatalf("expected the cached label before refresh:\n%s", v)
+	}
+	m.RefreshReplyAges()
+	if v := ansi.Strip(m.View(20, 80)); !strings.Contains(v, "Last reply 2 hours ago") {
+		t.Fatalf("label not refreshed:\n%s", v)
 	}
 }

@@ -780,3 +780,13 @@ type channelSearchDebounceMsg struct {
 	query string
 	gen   uint64
 }
+
+// replyAgeTickMsg fires once a minute so thread lines' "Last reply
+// N minutes ago" labels keep up with the clock. See replyAgeTick.
+type replyAgeTickMsg struct{}
+
+// replyAgeTick schedules the next replyAgeTickMsg. App.Init starts the
+// chain; the reduceThreads arm reschedules it.
+func replyAgeTick() tea.Cmd {
+	return tea.Tick(time.Minute, func(time.Time) tea.Msg { return replyAgeTickMsg{} })
+}

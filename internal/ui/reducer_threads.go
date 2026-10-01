@@ -70,6 +70,12 @@ import (
 )
 
 var reduceThreads reducerFunc = func(a *App, msg tea.Msg) (tea.Cmd, bool) {
+	if _, ok := msg.(replyAgeTickMsg); ok {
+		for _, mm := range a.allWinModels() {
+			mm.RefreshReplyAges()
+		}
+		return replyAgeTick(), true
+	}
 	var linkNav *pendingLinkNav
 	if m, ok := msg.(permalinkThreadResultMsg); ok {
 		p := m.nav

@@ -1307,6 +1307,29 @@ func (m *Model) SetMiniAvatarFunc(fn AvatarFunc) {
 	m.miniAvatarFn = fn
 }
 
+// RefreshReplyAges marks every thread parent's entry stale so its
+// "Last reply N minutes ago" label is recomputed on the next render.
+// The App calls it once a minute.
+func (m *Model) RefreshReplyAges() {
+	if m.cache == nil {
+		return
+	}
+	var marked bool
+	for _, msg := range m.messages {
+		if msg.ReplyCount == 0 || msg.LatestReply == "" {
+			continue
+		}
+		if m.staleEntries == nil {
+			m.staleEntries = make(map[string]struct{})
+		}
+		m.staleEntries[msg.TS] = struct{}{}
+		marked = true
+	}
+	if marked {
+		m.dirty()
+	}
+}
+
 func (m *Model) SetAvatarFunc(fn AvatarFunc) {
 	m.avatarFn = fn
 }

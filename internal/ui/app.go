@@ -885,9 +885,10 @@ func (a *App) Init() tea.Cmd {
 			tea.Tick(15*time.Second, func(time.Time) tea.Msg {
 				return LoadingTimeoutMsg{}
 			}),
+			replyAgeTick(),
 		)
 	}
-	return nil
+	return replyAgeTick()
 }
 
 // Update is the bubbletea entry point: the reducer chain in update,

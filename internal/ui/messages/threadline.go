@@ -31,7 +31,7 @@ func noteReplyUser(users []string, userID string) []string {
 
 // renderThreadLine draws the line under a thread parent: participant
 // avatars, the reply count and when the last reply landed, e.g.
-// "▣▣ 3 replies  Last reply today at 3:04 PM". miniAvatar may be nil
+// "▣▣ 3 replies  Last reply 2 hours ago". miniAvatar may be nil
 // or return "" for avatars that are not loaded yet; those are skipped.
 func renderThreadLine(msg MessageItem, miniAvatar func(userID string) string, now time.Time) string {
 	var b strings.Builder
@@ -59,28 +59,36 @@ func renderThreadLine(msg MessageItem, miniAvatar func(userID string) string, no
 	return b.String()
 }
 
-// lastReplyLabel formats a Slack ts relative to now the way Slack's
-// thread line does: "today at 3:04 PM", "yesterday at 9:12 AM",
-// "on Sep 30" beyond that. Empty or unparseable ts gives "".
+// lastReplyLabel says how long before now the ts was, in its largest
+// whole unit: "just now", "5 minutes ago", "2 hours ago", "3 days ago",
+// "2 months ago", "1 year ago". Empty or unparseable ts gives "".
+// The label ages while the line sits in the render cache;
+// RefreshReplyAges re-renders thread lines once a minute.
 func lastReplyLabel(ts string, now time.Time) string {
 	t, ok := tsTime(ts)
 	if !ok {
 		return ""
 	}
-	t = t.In(now.Location())
-	y1, m1, d1 := t.Date()
-	y2, m2, d2 := now.Date()
-	today := time.Date(y2, m2, d2, 0, 0, 0, 0, now.Location())
-	day := time.Date(y1, m1, d1, 0, 0, 0, 0, now.Location())
-	switch days := int(today.Sub(day).Hours() / 24); {
-	case days == 0:
-		return "today at " + t.Format("3:04 PM")
-	case days == 1:
-		return "yesterday at " + t.Format("3:04 PM")
-	case y1 == y2:
-		return "on " + t.Format("Jan 2")
+	d := now.Sub(t)
+	unit := func(n int, name string) string {
+		if n != 1 {
+			name += "s"
+		}
+		return fmt.Sprintf("%d %s ago", n, name)
+	}
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return unit(int(d/time.Minute), "minute")
+	case d < 24*time.Hour:
+		return unit(int(d/time.Hour), "hour")
+	case d < 30*24*time.Hour:
+		return unit(int(d/(24*time.Hour)), "day")
+	case d < 365*24*time.Hour:
+		return unit(int(d/(30*24*time.Hour)), "month")
 	default:
-		return "on " + t.Format("Jan 2, 2006")
+		return unit(int(d/(365*24*time.Hour)), "year")
 	}
 }
 
