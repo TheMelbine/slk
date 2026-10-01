@@ -1451,6 +1451,10 @@ func (m *Model) View(height, width int) string {
 	// left border + tint when the cursor sits on the parent, invisible
 	// border otherwise so the parent's width matches the reply rows.
 	if parentIsSelected {
+		// Same repaint as the per-reply selected variant: inner spans
+		// paint the theme bg (or none, on a transparent theme), which
+		// would punch holes in the tint.
+		parentContent = messages.RepaintBgToSelectionTint(parentContent, m.focused)
 		parentContent = lipgloss.NewStyle().BorderStyle(thickLeftBorder).BorderLeft(true).
 			BorderForeground(styles.SelectionBorderColor(m.focused)).
 			BorderBackground(styles.SelectionTintColor(m.focused)).
