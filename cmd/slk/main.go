@@ -459,6 +459,11 @@ func run() error {
 	// half-block terminals fall back to half-block — re-emitting sixel
 	// per visible avatar per redraw would dominate the bandwidth budget.
 	avatarCache := avatar.NewCache(imageFetcher, imgpkg.KittyRendererInstance(), proto == imgpkg.ProtoKitty)
+	if proto == imgpkg.ProtoKitty {
+		// Drop images a previous slk run left in the terminal before we
+		// start minting IDs again. See ClearKittyImages.
+		_ = imgpkg.ClearKittyImages(imgpkg.KittyOutput)
+	}
 
 	// Cell pixel metrics for image encoding. Sixel uses them for its
 	// absolute raster dimensions; kitty places by cell but uses them to

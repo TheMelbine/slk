@@ -318,3 +318,14 @@ func TestKitty_PayloadCacheUploadIdentity(t *testing.T) {
 		t.Errorf("upload bytes differ between consecutive fresh=true calls\nlen a=%d b=%d", aBuf.Len(), bBuf.Len())
 	}
 }
+
+func TestClearKittyImages(t *testing.T) {
+	t.Setenv("TMUX", "")
+	var buf bytes.Buffer
+	if err := ClearKittyImages(&buf); err != nil {
+		t.Fatal(err)
+	}
+	if got := buf.String(); got != "\x1b_Ga=d,d=A,q=2\x1b\\" {
+		t.Fatalf("got %q", got)
+	}
+}

@@ -74,6 +74,15 @@ func writeKittySequence(w io.Writer, seq string) error {
 	return err
 }
 
+// ClearKittyImages deletes every image and placement the terminal holds
+// for this session. Image IDs are minted from 1 on every start, so
+// without this a placement left by a previous run (e.g. a 2x1 avatar)
+// keeps answering for an ID this run gives to a 4x2 one, and the image
+// draws at the wrong size.
+func ClearKittyImages(w io.Writer) error {
+	return writeKittySequence(w, "\x1b_Ga=d,d=A,q=2\x1b\\")
+}
+
 // forTerminal returns seq as it must reach the terminal: wrapped for
 // tmux passthrough when running inside tmux, unchanged otherwise.
 func forTerminal(seq string) string {
