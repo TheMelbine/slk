@@ -614,6 +614,24 @@ func NewAvatarService(avatar func(userID string) string) AvatarService {
 
 type avatarAdapter struct{ avatar func(userID string) string }
 
+// NewAvatarServiceWithMini is NewAvatarService plus a one-row renderer;
+// the result also implements MiniAvatarService.
+func NewAvatarServiceWithMini(avatar, mini func(userID string) string) AvatarService {
+	return miniAvatarAdapter{avatarAdapter: avatarAdapter{avatar: avatar}, mini: mini}
+}
+
+type miniAvatarAdapter struct {
+	avatarAdapter
+	mini func(userID string) string
+}
+
+func (a miniAvatarAdapter) MiniAvatar(userID string) string {
+	if a.mini == nil {
+		return ""
+	}
+	return a.mini(userID)
+}
+
 func (a avatarAdapter) Avatar(userID string) string {
 	if a.avatar == nil {
 		return ""

@@ -360,6 +360,7 @@ type App struct {
 	// newWindowModel can configure late-created window models
 	// identically to the root model. See internal/ui/winmodels.go.
 	avatarFn     messages.AvatarFunc
+	miniAvatarFn messages.AvatarFunc
 	imageCtx     imgrender.ImageContext
 	emojiCtx     messages.EmojiContext
 	emojiCustoms map[string]string
@@ -2739,9 +2740,15 @@ func (a *App) SetAvatarService(s core.AvatarService) {
 	if s != nil {
 		fn = s.Avatar
 	}
+	var mini messages.AvatarFunc
+	if ms, ok := s.(core.MiniAvatarService); ok {
+		mini = ms.MiniAvatar
+	}
 	a.avatarFn = fn
+	a.miniAvatarFn = mini
 	for _, m := range a.allWinModels() {
 		m.SetAvatarFunc(fn)
+		m.SetMiniAvatarFunc(mini)
 	}
 	a.threadPanel.SetAvatarFunc(fn)
 }

@@ -113,6 +113,8 @@ func convertAndCacheHistory(client *slackclient.Client, channelID string, histor
 			Timestamp:         formatTimestamp(m.Timestamp, tsFormat),
 			ThreadTS:          m.ThreadTimestamp,
 			ReplyCount:        m.ReplyCount,
+			ReplyUsers:        m.ReplyUsers,
+			LatestReply:       m.LatestReply,
 			Subtype:           m.SubType,
 			Reactions:         reactions,
 			Attachments:       extractAttachments(m.Files),
@@ -372,6 +374,8 @@ func enrichCachedRow(
 	var attachments []messages.Attachment
 	var blocks []blockkit.Block
 	var legacy []blockkit.LegacyAttachment
+	var replyUsers []string
+	var latestReply string
 	if m.RawJSON != "" {
 		var raw slack.Message
 		var unmarshalT0 time.Time
@@ -390,6 +394,8 @@ func enrichCachedRow(
 			attachments = extractAttachments(raw.Files)
 			blocks = extractBlocks(raw.Blocks)
 			legacy = extractLegacyAttachments(raw.Attachments)
+			replyUsers = raw.ReplyUsers
+			latestReply = raw.LatestReply
 		}
 	}
 
@@ -401,6 +407,8 @@ func enrichCachedRow(
 		Timestamp:         formatTimestamp(m.TS, tsFormat),
 		ThreadTS:          m.ThreadTS,
 		ReplyCount:        m.ReplyCount,
+		ReplyUsers:        replyUsers,
+		LatestReply:       latestReply,
 		Subtype:           m.Subtype,
 		Reactions:         reactions,
 		Attachments:       attachments,
@@ -519,6 +527,8 @@ func fetchChannelMessages(client *slackclient.Client, channelID string, db *cach
 			Timestamp:         formatTimestamp(m.Timestamp, tsFormat),
 			ThreadTS:          m.ThreadTimestamp,
 			ReplyCount:        m.ReplyCount,
+			ReplyUsers:        m.ReplyUsers,
+			LatestReply:       m.LatestReply,
 			Subtype:           m.SubType,
 			Reactions:         reactions,
 			Attachments:       extractAttachments(m.Files),
@@ -602,6 +612,8 @@ func fetchThreadReplies(client *slackclient.Client, channelID, threadTS string, 
 			Timestamp:         formatTimestamp(m.Timestamp, tsFormat),
 			ThreadTS:          m.ThreadTimestamp,
 			ReplyCount:        m.ReplyCount,
+			ReplyUsers:        m.ReplyUsers,
+			LatestReply:       m.LatestReply,
 			Subtype:           m.SubType,
 			Reactions:         reactions,
 			Attachments:       extractAttachments(m.Files),

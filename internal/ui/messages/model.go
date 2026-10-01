@@ -189,6 +189,7 @@ type Model struct {
 	loading      bool
 	spinnerFrame int                          // braille-spinner frame index for "Loading messages..." animation
 	avatarFn     AvatarFunc                   // optional: returns half-block avatar for a userID
+	miniAvatarFn AvatarFunc                   // optional: one-row avatar for the thread line
 	userNames    map[string]string            // user ID -> display name for mention resolution
 	userStatuses map[string]peerstatus.Status // user ID -> custom status shown after author names
 	channelNames map[string]string            // channel ID -> name for bare <#CID> resolution
@@ -475,7 +476,7 @@ func (m *Model) HandleAvatarReady(userID string) {
 	}
 	var marked bool
 	for _, msg := range m.messages {
-		if msg.UserID != userID {
+		if msg.UserID != userID && !slices.Contains(msg.ReplyUsers, userID) {
 			continue
 		}
 		if m.staleEntries == nil {
@@ -1079,8 +1080,9 @@ func (m *Model) ClampReactionNav() {
 // Idempotent on (parentTS, replyTS): the optimistic ThreadReplySentMsg path
 // and the WS echo NewMessageMsg path can both fire for the same reply --
 // pass the reply's own TS to dedup. An empty replyTS skips dedup (legacy
-// callers that don't yet pass it).
-func (m *Model) IncrementReplyCount(parentTS, replyTS string) {
+// callers that don't yet pass it). userID, when set, becomes the newest
+// thread participant and replyTS the latest reply.
+func (m *Model) IncrementReplyCount(parentTS, replyTS, userID string) {
 	if replyTS != "" {
 		if m.countedReplies == nil {
 			m.countedReplies = make(map[string]map[string]struct{})
@@ -1109,6 +1111,10 @@ func (m *Model) IncrementReplyCount(parentTS, replyTS string) {
 	for i, msg := range m.messages {
 		if msg.TS == parentTS {
 			m.messages[i].ReplyCount++
+			m.messages[i].ReplyUsers = noteReplyUser(m.messages[i].ReplyUsers, userID)
+			if replyTS > m.messages[i].LatestReply {
+				m.messages[i].LatestReply = replyTS
+			}
 			m.cache = nil
 			m.dirty()
 			if wasAnchoredAtBottom && m.cacheWidth > 0 {
@@ -1293,6 +1299,12 @@ func (m *Model) SetSpinnerFrame(f int) {
 		m.spinnerFrame = f
 		m.dirty()
 	}
+}
+
+// SetMiniAvatarFunc sets the one-row avatar renderer used for thread
+// participants on the "N replies" line.
+func (m *Model) SetMiniAvatarFunc(fn AvatarFunc) {
+	m.miniAvatarFn = fn
 }
 
 func (m *Model) SetAvatarFunc(fn AvatarFunc) {
@@ -2045,12 +2057,7 @@ func (m *Model) renderMessagePlain(msg MessageItem, width int, avatarStr string,
 
 	var threadLine string
 	if msg.ReplyCount > 0 {
-		word := "replies"
-		if msg.ReplyCount == 1 {
-			word = "reply"
-		}
-		threadLine = "\n" + styles.ThreadIndicator.Render(
-			fmt.Sprintf("[%d %s ->]", msg.ReplyCount, word))
+		threadLine = "\n" + renderThreadLine(msg, m.miniAvatarFn, nowFunc())
 	}
 
 	var reactionLine string

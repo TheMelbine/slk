@@ -21,6 +21,7 @@ import (
 func (a *App) newWindowModel(chName string) *messages.Model {
 	m := messages.New(nil, chName)
 	m.SetAvatarFunc(a.avatarFn)
+	m.SetMiniAvatarFunc(a.miniAvatarFn)
 	m.SetUserNames(a.userNames)
 	m.SetUserStatuses(a.presence.peers)
 	m.SetChannelNames(a.channelNames)

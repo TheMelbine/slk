@@ -373,6 +373,13 @@ type AvatarService interface {
 	Avatar(userID string) string
 }
 
+// MiniAvatarService is optionally implemented by an AvatarService that
+// can also render a one-row avatar, used for thread participants on the
+// "N replies" line.
+type MiniAvatarService interface {
+	MiniAvatar(userID string) string
+}
+
 // ImageFetcher downloads and caches remote images for inline rendering
 // and keeps pre-encoded renders of them. *image.Fetcher implements it.
 //

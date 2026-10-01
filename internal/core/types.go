@@ -21,14 +21,20 @@ type ForwardResult struct {
 
 // MessageItem is one message as the TUI displays it.
 type MessageItem struct {
-	TS          string
-	UserName    string
-	UserID      string
-	Text        string
-	Timestamp   string // formatted display time (e.g. "3:04 PM")
-	DateStr     string // date string for grouping (e.g. "2026-04-23")
-	ThreadTS    string
-	ReplyCount  int
+	TS         string
+	UserName   string
+	UserID     string
+	Text       string
+	Timestamp  string // formatted display time (e.g. "3:04 PM")
+	DateStr    string // date string for grouping (e.g. "2026-04-23")
+	ThreadTS   string
+	ReplyCount int
+	// ReplyUsers are the IDs of up to five thread participants, oldest
+	// first, and LatestReply is the ts of the newest reply. Both come
+	// from Slack's reply_users / latest_reply on the parent and drive
+	// the avatars and "last reply" time on the thread line.
+	ReplyUsers  []string
+	LatestReply string
 	Reactions   []ReactionItem
 	Attachments []Attachment
 	IsEdited    bool

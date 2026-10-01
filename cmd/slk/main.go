@@ -593,25 +593,29 @@ func run() error {
 	// thousands of users) wrote ~100MB of kitty graphics APC escape
 	// data to stdout at startup and produced a multi-minute hang on
 	// terminals that decode kitty graphics (kitty, ghostty).
-	app.SetAvatarService(core.NewAvatarService(func(userID string) string {
-		if rendered := avatarCache.Get(userID); rendered != "" {
-			return rendered
-		}
-		// Cache miss: trigger a lazy Preload using the URL the
-		// workspace recorded at connect time (or that resolveUser
-		// filled in). No router-active = pre-workspace-ready render;
-		// AvatarReadyMsg will invalidate once the avatar lands.
-		wctx := router.Active()
-		if wctx == nil || wctx.AvatarURLs == nil {
+	lazyAvatar := func(get func(string) string) func(userID string) string {
+		return func(userID string) string {
+			if rendered := get(userID); rendered != "" {
+				return rendered
+			}
+			// Cache miss: trigger a lazy Preload using the URL the
+			// workspace recorded at connect time (or that resolveUser
+			// filled in). No router-active = pre-workspace-ready render;
+			// AvatarReadyMsg will invalidate once the avatar lands.
+			wctx := router.Active()
+			if wctx == nil || wctx.AvatarURLs == nil {
+				return ""
+			}
+			if v, ok := wctx.AvatarURLs.Load(userID); ok {
+				if url, ok := v.(string); ok && url != "" {
+					avatarCache.Preload(userID, url)
+				}
+			}
 			return ""
 		}
-		if v, ok := wctx.AvatarURLs.Load(userID); ok {
-			if url, ok := v.(string); ok && url != "" {
-				avatarCache.Preload(userID, url)
-			}
-		}
-		return ""
-	}))
+	}
+	app.SetAvatarService(core.NewAvatarServiceWithMini(
+		lazyAvatar(avatarCache.Get), lazyAvatar(avatarCache.GetMini)))
 
 	// Wire theme switcher: dispatch to the appropriate saver based on scope.
 	saveTheme := func(name string, scope core.ThemeScope) {

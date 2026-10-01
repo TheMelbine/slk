@@ -22,6 +22,12 @@ const (
 	// rows per cell row; kitty fits the source image to AvatarCols×AvatarRows
 	// cells and the terminal scales pixels appropriately.
 	AvatarRows = 2
+
+	// MiniCols × MiniRows is the one-row avatar drawn for thread
+	// participants on a message's "N replies" line. Two cells wide by
+	// one tall is roughly square on typical cell aspect ratios.
+	MiniCols = 2
+	MiniRows = 1
 )
 
 // avatarPreloadWorkers caps the number of avatar Preload jobs that
@@ -59,6 +65,7 @@ type Cache struct {
 
 	mu      sync.RWMutex
 	renders map[string]string // userID -> rendered ANSI string
+	minis   map[string]string // userID -> rendered MiniCols×MiniRows string
 
 	// inflight tracks userIDs whose Preload is currently in-flight (or
 	// already rendered). Acts as a dedup gate so a hot render path
@@ -192,8 +199,13 @@ func (c *Cache) preloadInner(userID, avatarURL string) {
 		return
 	}
 	rendered := c.renderAvatar(userID, res.Img)
+	mini := c.renderAt("avatar-mini-"+userID, res.Img, image.Pt(MiniCols, MiniRows))
 	c.mu.Lock()
 	c.renders[userID] = rendered
+	if c.minis == nil {
+		c.minis = make(map[string]string)
+	}
+	c.minis[userID] = mini
 	c.mu.Unlock()
 	if c.onReady != nil {
 		c.onReady(userID)
@@ -207,15 +219,26 @@ func (c *Cache) Get(userID string) string {
 	return c.renders[userID]
 }
 
+// GetMini returns the one-row avatar, or empty if not cached. It is
+// rendered alongside the full avatar, so Preload fills both.
+func (c *Cache) GetMini(userID string) string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.minis[userID]
+}
+
 // renderAvatar produces the avatar's rendered string for the active
 // protocol. Kitty path: SetSource + RenderKey, immediately drain the
 // upload escape to the kitty side channel (the registry's fresh-flag
 // guarantees this fires only once per user), and return the
 // placeholder cells. Half-block path: encode and return.
 func (c *Cache) renderAvatar(userID string, img image.Image) string {
-	target := image.Pt(AvatarCols, AvatarRows)
+	return c.renderAt("avatar-"+userID, img, image.Pt(AvatarCols, AvatarRows))
+}
+
+// renderAt renders img at target cells under the kitty registry key.
+func (c *Cache) renderAt(key string, img image.Image, target image.Point) string {
 	if c.useKitty {
-		key := "avatar-" + userID
 		c.kitty.SetSource(key, img)
 		out := c.kitty.RenderKey(key, target)
 		// Fire the upload escape NOW (single-threaded from
