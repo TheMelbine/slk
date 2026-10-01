@@ -225,6 +225,11 @@ sidebar_background = "#19171D"
 sidebar_text       = "#D1D2D3"
 sidebar_text_muted = "#9A9B9E"
 rail_background    = "#19171D"
+
+# Optional: author-name color when colored_usernames is off (default:
+# primary). Any color may be "none" to use the terminal's own color,
+# e.g. background = "none" for a translucent terminal.
+username = "#F8F8F2"
 ```
 
 Every built-in theme now sets a channels-panel (sidebar) background that is

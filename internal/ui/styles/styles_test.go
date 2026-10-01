@@ -2,6 +2,7 @@ package styles
 
 import (
 	"fmt"
+	"github.com/gammons/slk/internal/core"
 	"image/color"
 	"testing"
 
@@ -243,5 +244,29 @@ func TestThemeColor_TransparentKeywords(t *testing.T) {
 	}
 	if _, ok := themeColor("#262624").(lipgloss.NoColor); ok {
 		t.Error("hex color parsed as NoColor")
+	}
+}
+
+// A theme's `username` recolors author names without touching Primary;
+// themes that omit it keep names in Primary as before.
+func TestApply_UsernameColor(t *testing.T) {
+	t.Cleanup(func() { Apply("dark", core.Theme{}) })
+	RegisterCustomTheme("username test", ThemeColors{
+		Primary: "#D77757", Accent: "#4EBA65", Warning: "#FFC107", Error: "#FF6B80",
+		Background: "#262624", Surface: "#30302E", SurfaceDark: "#1F1E1D",
+		Text: "#FAF9F5", TextMuted: "#999999", Border: "#4A4844",
+		Username: "#FAF9F5",
+	})
+	Apply("username test", core.Theme{})
+	if got := Username("U1", false).GetForeground(); !colorEqual(got, lipgloss.Color("#FAF9F5")) {
+		t.Errorf("username fg = %v, want the theme's username color", got)
+	}
+	if !colorEqual(Primary, lipgloss.Color("#D77757")) {
+		t.Errorf("Primary changed to %v", Primary)
+	}
+
+	Apply("dark", core.Theme{})
+	if got := Username("U1", false).GetForeground(); !colorEqual(got, Primary) {
+		t.Errorf("without `username`, fg = %v, want Primary %v", got, Primary)
 	}
 }

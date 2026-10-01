@@ -36,6 +36,9 @@ var (
 	// SelectionStyle() always produces visible highlight on any theme.
 	SelectionBackground color.Color
 	SelectionForeground color.Color
+	// UsernameColor is the author-name color when per-user coloring is
+	// off. Themes set it with `username`; it defaults to Primary.
+	UsernameColor color.Color = Primary
 
 	// Search-match highlight. Apply() either copies the theme's values
 	// or derives a default (Warning as bg, Background as fg) so
@@ -353,6 +356,12 @@ func Apply(themeName string, overrides core.Theme) {
 		// every built-in theme.
 		SelectionBackground = Primary
 	}
+	if colors.Username != "" {
+		UsernameColor = themeColor(colors.Username)
+	} else {
+		UsernameColor = Primary
+	}
+
 	if colors.SelectionForeground != "" {
 		SelectionForeground = themeColor(colors.SelectionForeground)
 	} else {
@@ -423,10 +432,10 @@ func UserColor(userID string) color.Color {
 
 // Username returns a lipgloss style for rendering a username. When colored
 // is true and userID is non-empty, the foreground color is deterministically
-// derived from userID via UserColor. Otherwise the theme default (Primary)
-// is used.
+// derived from userID via UserColor. Otherwise the theme's UsernameColor
+// (Primary unless the theme sets `username`) is used.
 func Username(userID string, colored bool) lipgloss.Style {
-	fg := Primary
+	fg := UsernameColor
 	if colored && userID != "" {
 		fg = UserColor(userID)
 	}

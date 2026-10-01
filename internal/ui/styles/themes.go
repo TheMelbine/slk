@@ -34,8 +34,11 @@ type ThemeColors struct {
 	RailBackground      string `toml:"rail_background"`
 	SelectionBackground string `toml:"selection_background"`
 	SelectionForeground string `toml:"selection_foreground"`
-	SearchHighlightBg   string `toml:"search_highlight_bg"`
-	SearchHighlightFg   string `toml:"search_highlight_fg"`
+	// Username is the author-name color when colored_usernames is off.
+	// Empty means Primary, which paints every name in the accent color.
+	Username          string `toml:"username"`
+	SearchHighlightBg string `toml:"search_highlight_bg"`
+	SearchHighlightFg string `toml:"search_highlight_fg"`
 	// ComposeInsertBG, SelectionBgFocused, and SelectionBgUnfocused are
 	// optional explicit overrides for the tints derived in tint.go. When
 	// empty, tint.go computes them from Accent/TextMuted+Background.
