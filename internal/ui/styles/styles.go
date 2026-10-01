@@ -600,3 +600,17 @@ func themeColor(s string) color.Color {
 	}
 	return lipgloss.Color(s)
 }
+
+// InvisibleLeftBorder is the one-column left border an unselected row
+// carries so its text lines up with the selected row's visible bar.
+// It is the bar glyph painted in the background color; on a theme with
+// no background color (see themeColor) that would draw in the terminal's
+// default text color, so the column is a plain space instead.
+func InvisibleLeftBorder() lipgloss.Style {
+	border := lipgloss.Border{Left: "▌"}
+	if _, ok := Background.(lipgloss.NoColor); ok {
+		border.Left = " "
+	}
+	return lipgloss.NewStyle().BorderStyle(border).BorderLeft(true).
+		BorderForeground(Background).BorderBackground(Background)
+}

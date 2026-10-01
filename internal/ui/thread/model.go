@@ -1461,9 +1461,7 @@ func (m *Model) View(height, width int) string {
 			Background(styles.SelectionTintColor(m.focused)).
 			Render(parentContent)
 	} else {
-		parentContent = lipgloss.NewStyle().BorderStyle(thickLeftBorder).BorderLeft(true).
-			BorderForeground(styles.Background).BorderBackground(styles.Background).
-			Render(parentContent)
+		parentContent = styles.InvisibleLeftBorder().Render(parentContent)
 	}
 	parentSeparator := lipgloss.NewStyle().
 		Width(width).
@@ -1558,8 +1556,7 @@ func (m *Model) View(height, width int) string {
 		// (linesNormal vs linesSelected) instead of running lipgloss for
 		// every visible reply on every j/k.
 		borderFill := lipgloss.NewStyle().Background(styles.Background)
-		borderInvis := lipgloss.NewStyle().BorderStyle(thickLeftBorder).BorderLeft(true).
-			BorderForeground(styles.Background).BorderBackground(styles.Background)
+		borderInvis := styles.InvisibleLeftBorder()
 		borderSelect := lipgloss.NewStyle().BorderStyle(thickLeftBorder).BorderLeft(true).
 			BorderForeground(styles.SelectionBorderColor(m.focused)).
 			BorderBackground(styles.SelectionTintColor(m.focused)).

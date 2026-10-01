@@ -1594,7 +1594,7 @@ type cacheStyles struct {
 // renderLoadingOlderHint(width) on every frame instead.
 func (m *Model) buildCacheStyles(width int) cacheStyles {
 	borderFill := lipgloss.NewStyle().Background(styles.Background)
-	borderInvis := lipgloss.NewStyle().BorderStyle(thickLeftBorder).BorderLeft(true).BorderForeground(styles.Background).BorderBackground(styles.Background)
+	borderInvis := styles.InvisibleLeftBorder()
 	borderSelect := lipgloss.NewStyle().
 		BorderStyle(thickLeftBorder).BorderLeft(true).
 		BorderForeground(styles.SelectionBorderColor(m.focused)).

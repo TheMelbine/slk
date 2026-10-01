@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/gammons/slk/internal/core"
 	"image/color"
+	"strings"
 	"testing"
 
 	"charm.land/lipgloss/v2"
@@ -268,5 +269,26 @@ func TestApply_UsernameColor(t *testing.T) {
 	Apply("dark", core.Theme{})
 	if got := Username("U1", false).GetForeground(); !colorEqual(got, Primary) {
 		t.Errorf("without `username`, fg = %v, want Primary %v", got, Primary)
+	}
+}
+
+// On a theme with no background color the unselected row's border must
+// not draw the bar glyph: painted in "no color" it shows as a bar in the
+// terminal's default text color.
+func TestInvisibleLeftBorder(t *testing.T) {
+	prev := Background
+	t.Cleanup(func() { Background = prev })
+
+	Background = lipgloss.Color("#262624")
+	if got := InvisibleLeftBorder().Render("x"); !strings.Contains(got, "▌") {
+		t.Errorf("opaque theme: want the bar glyph (in the bg color), got %q", got)
+	}
+	Background = lipgloss.NoColor{}
+	got := InvisibleLeftBorder().Render("x")
+	if strings.Contains(got, "▌") {
+		t.Errorf("transparent theme: bar glyph drawn: %q", got)
+	}
+	if w := lipgloss.Width(got); w != 2 {
+		t.Errorf("transparent theme: width = %d, want 2 (space + content)", w)
 	}
 }

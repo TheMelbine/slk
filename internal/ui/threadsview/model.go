@@ -55,10 +55,7 @@ func channelNameStyle() lipgloss.Style {
 var thickLeftBorder = lipgloss.Border{Left: "▌"}
 
 func borderInvisStyle() lipgloss.Style {
-	return lipgloss.NewStyle().
-		BorderStyle(thickLeftBorder).BorderLeft(true).
-		BorderForeground(styles.Background).
-		BorderBackground(styles.Background)
+	return styles.InvisibleLeftBorder()
 }
 
 // borderSelectStyle returns the bordered style for the selected card.
