@@ -34,7 +34,8 @@ func TestEmitKittyUpload_MultiChunkPayloadIsOneWrite(t *testing.T) {
 	if len(rec.writes) != 1 {
 		t.Fatalf("upload took %d writes; want 1", len(rec.writes))
 	}
-	want := forTerminal("\x1b_Ga=T,f=100,t=d,i=7,U=1,c=4,r=2,q=2,m=1;"+strings.Repeat("A", 4096)+"\x1b\\") +
+	want := forTerminal("\x1b_Ga=d,d=I,i=7,q=2\x1b\\") +
+		forTerminal("\x1b_Ga=T,f=100,t=d,i=7,p=1,U=1,c=4,r=2,q=2,m=1;"+strings.Repeat("A", 4096)+"\x1b\\") +
 		forTerminal("\x1b_Gm=1;"+strings.Repeat("B", 4096)+"\x1b\\") +
 		forTerminal("\x1b_Gm=0;CC\x1b\\")
 	if got := string(rec.writes[0]); got != want {
@@ -66,11 +67,18 @@ func TestEmitKittyUpload_ConcurrentUploadsDoNotInterleave(t *testing.T) {
 	if inTmux() {
 		t.Skip("stream parsing below assumes unwrapped sequences")
 	}
-	seqRe := regexp.MustCompile("\x1b_G([^;]*);([^\x1b]*)\x1b\\\\")
+	seqRe := regexp.MustCompile("\x1b_G([^;\x1b]*)(?:;([^\x1b]*))?\x1b\\\\")
 	current := 0
 	started := 0
 	for _, m := range seqRe.FindAllStringSubmatch(stream, -1) {
 		hdr, data := m[1], m[2]
+		if strings.HasPrefix(hdr, "a=d") {
+			// The per-id delete that precedes each upload's first chunk.
+			if current != 0 {
+				t.Fatalf("delete for image %d landed inside upload %d", idOf(hdr), current)
+			}
+			continue
+		}
 		if strings.HasPrefix(hdr, "a=T") {
 			if current != 0 {
 				t.Fatalf("upload %d started while upload %d was still in progress", idOf(hdr), current)

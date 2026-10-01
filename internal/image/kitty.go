@@ -314,6 +314,13 @@ func (k *KittyRenderer) RenderKey(key string, target image.Point) Render {
 func emitKittyUpload(w io.Writer, id uint32, payload string, cols, rows int) error {
 	const chunk = 4096
 	var sb strings.Builder
+	// Drop whatever the terminal still holds under this id first. IDs
+	// restart from 1 every run, and Ghostty keeps an old virtual
+	// placement when an id is re-transmitted: the new picture then draws
+	// at the stale placement's size (a 49x20 attachment squeezed into a
+	// previous run's 2x1 avatar). The fixed placement id below makes a
+	// re-transmit replace the placement instead of adding a second one.
+	sb.WriteString(forTerminal(fmt.Sprintf("\x1b_Ga=d,d=I,i=%d,q=2\x1b\\", id)))
 	for i := 0; i < len(payload); i += chunk {
 		end := i + chunk
 		more := 1
@@ -323,7 +330,7 @@ func emitKittyUpload(w io.Writer, id uint32, payload string, cols, rows int) err
 		}
 		var hdr string
 		if i == 0 {
-			hdr = fmt.Sprintf("a=T,f=100,t=d,i=%d,U=1,c=%d,r=%d,q=2,m=%d", id, cols, rows, more)
+			hdr = fmt.Sprintf("a=T,f=100,t=d,i=%d,p=1,U=1,c=%d,r=%d,q=2,m=%d", id, cols, rows, more)
 		} else {
 			hdr = fmt.Sprintf("m=%d", more)
 		}
