@@ -948,3 +948,12 @@ func TestRenderSlackMarkdown_TildesInsideLinkURL(t *testing.T) {
 		t.Fatalf("label missing: %q", out)
 	}
 }
+
+func TestANSIFor_NoColorIsTerminalDefault(t *testing.T) {
+	if got := bgANSIFor(lipgloss.NoColor{}); got != "\x1b[49m" {
+		t.Errorf("bgANSIFor(NoColor) = %q", got)
+	}
+	if got := fgANSIFor(lipgloss.NoColor{}); got != "\x1b[39m" {
+		t.Errorf("fgANSIFor(NoColor) = %q", got)
+	}
+}

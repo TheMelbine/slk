@@ -234,3 +234,14 @@ func TestMentionBadgeStyle_HonorsSelectionOverride(t *testing.T) {
 		t.Errorf("foreground = %v, want #ABCDEF", s.GetForeground())
 	}
 }
+
+func TestThemeColor_TransparentKeywords(t *testing.T) {
+	for _, s := range []string{"none", "Transparent", " default "} {
+		if _, ok := themeColor(s).(lipgloss.NoColor); !ok {
+			t.Errorf("themeColor(%q) = %#v, want lipgloss.NoColor", s, themeColor(s))
+		}
+	}
+	if _, ok := themeColor("#262624").(lipgloss.NoColor); ok {
+		t.Error("hex color parsed as NoColor")
+	}
+}

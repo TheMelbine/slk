@@ -510,6 +510,8 @@ func isBasicBgParam(s string) bool {
 // Otherwise it falls back to truecolor (\x1b[48;2;R;G;Bm).
 func bgANSIFor(c color.Color) string {
 	switch v := c.(type) {
+	case lipgloss.NoColor:
+		return "\x1b[49m" // terminal default background
 	case ansi.BasicColor:
 		if v < 8 {
 			return fmt.Sprintf("\x1b[%dm", 40+int(v))
@@ -529,6 +531,8 @@ func bgANSIFor(c color.Color) string {
 // See bgANSIFor for the type-switch rationale.
 func fgANSIFor(c color.Color) string {
 	switch v := c.(type) {
+	case lipgloss.NoColor:
+		return "\x1b[39m" // terminal default foreground
 	case ansi.BasicColor:
 		if v < 8 {
 			return fmt.Sprintf("\x1b[%dm", 30+int(v))
