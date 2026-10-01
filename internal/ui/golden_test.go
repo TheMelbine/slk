@@ -2071,14 +2071,17 @@ func TestGolden_OverlayFinderIsCompositedOverBackdrop(t *testing.T) {
 	}
 
 	// The box is CENTERED: DimmedOverlay places it at
-	// (width-modalW)/2, so the rows carrying its text must start
-	// well inside the frame rather than at column 0.
+	// (width-modalW)/2, so its title must sit well inside the frame
+	// rather than at column 0. Measured as the title's column, not as
+	// leading spaces: with a single workspace the rail is not drawn and
+	// the row starts with the sidebar's border.
 	for _, line := range strings.Split(plain, "\n") {
-		if !strings.Contains(line, "Switch Channel") {
+		before, _, found := strings.Cut(line, "Switch Channel")
+		if !found {
 			continue
 		}
-		if lead := len(line) - len(strings.TrimLeft(line, " ")); lead < 4 {
-			t.Errorf("the finder box is not centered: %q has %d leading spaces", line, lead)
+		if col := len([]rune(before)); col < 4 {
+			t.Errorf("the finder box is not centered: %q has its title at column %d", line, col)
 		}
 	}
 

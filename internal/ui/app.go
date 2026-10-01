@@ -3394,7 +3394,9 @@ func (a *App) View() tea.View {
 	previewActive := a.preview.Active()
 
 	var panels []string
-	panels = append(panels, a.renderRail(frame.RailWidth, frame.ContentHeight, themeVer))
+	if frame.RailWidth > 0 {
+		panels = append(panels, a.renderRail(frame.RailWidth, frame.ContentHeight, themeVer))
+	}
 	if a.sidebarVisible {
 		panels = append(panels, a.renderSidebar(frame.SidebarWidth, frame.SidebarBorder, frame.ContentHeight, themeVer))
 	}

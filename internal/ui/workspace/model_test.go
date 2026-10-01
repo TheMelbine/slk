@@ -138,3 +138,16 @@ func TestOtherUnreadCount_EmptyReaderResult(t *testing.T) {
 		t.Errorf("OtherUnreadCount with empty reader = %d want 0", got)
 	}
 }
+
+// One workspace leaves nothing to switch between, so the rail takes no
+// columns; a second workspace brings it back.
+func TestWidth_HiddenForSingleWorkspace(t *testing.T) {
+	one := New([]WorkspaceItem{{ID: "T1", Name: "Acme"}}, 0)
+	if got := one.Width(); got != 0 {
+		t.Errorf("single workspace: Width() = %d, want 0", got)
+	}
+	two := New([]WorkspaceItem{{ID: "T1", Name: "Acme"}, {ID: "T2", Name: "Other"}}, 0)
+	if got := two.Width(); got != 6 {
+		t.Errorf("two workspaces: Width() = %d, want 6", got)
+	}
+}

@@ -215,7 +215,12 @@ func (m Model) ClickAt(y int) (WorkspaceItem, bool) {
 	return m.items[idx], true
 }
 
+// Width is the rail's column count. With a single workspace there is
+// nothing to switch between, so the rail is not drawn and takes no room.
 func (m Model) Width() int {
+	if len(m.items) <= 1 {
+		return 0
+	}
 	return 6 // 6 content, no border
 }
 

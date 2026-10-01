@@ -14,7 +14,7 @@ func TestStacked_WindowSplitWithThreadInFront(t *testing.T) {
 	assertFront(t, a, false, true)
 
 	bands := *a.layout
-	want := wintree.Rect{W: 150 - testRailW - testSidebarW - 2, H: 29}
+	want := wintree.Rect{W: 150 - a.workspaceRail.Width() - testSidebarW - 2, H: 29}
 	if got := a.windowBounds(); got != want {
 		t.Errorf("windowBounds = %+v, want %+v (the channel-in-front area the windows fill)", got, want)
 	}
