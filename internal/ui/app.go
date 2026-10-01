@@ -177,6 +177,11 @@ type App struct {
 	// disarms (see SetMode).
 	pendingTop bool
 
+	// nonLatinLayout records whether the last letter typed was
+	// non-ASCII, i.e. a Cyrillic layout is active. physicalKey then
+	// also remaps ASCII punctuation (`.` sits on the US `/` key).
+	nonLatinLayout bool
+
 	// layout owns the per-frame layout geometry (horizontal bands for
 	// mouse hit-testing + per-pane content heights for pageSize). See
 	// internal/ui/panellayout.go.
@@ -1048,7 +1053,8 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (a *App) handleKey(msg tea.KeyMsg) tea.Cmd {
-	msg = physicalKey(msg, !textEntryMode(a.mode))
+	a.nonLatinLayout = layoutHint(msg, a.nonLatinLayout)
+	msg = physicalKey(msg, !textEntryMode(a.mode), a.nonLatinLayout)
 
 	// Ctrl+C is intercepted globally and routed through the same
 	// confirm prompt as lowercase `q`, so an accidental Ctrl+C while

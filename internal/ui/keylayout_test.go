@@ -10,22 +10,27 @@ import (
 func TestPhysicalKey(t *testing.T) {
 	keys := DefaultKeyMap()
 	cases := []struct {
-		name string
-		in   tea.KeyPressMsg
-		want key.Binding
+		name     string
+		in       tea.KeyPressMsg
+		want     key.Binding
+		nonLatin bool
 	}{
-		{"table: о is j", tea.KeyPressMsg{Code: 'о', Text: "о"}, keys.Down},
-		{"table: л is k", tea.KeyPressMsg{Code: 'л', Text: "л"}, keys.Up},
-		{"table: legacy uppercase П is G", tea.KeyPressMsg{Code: 'П', Text: "П"}, keys.Bottom},
-		{"table: shift+ж is :", tea.KeyPressMsg{Code: 'ж', Mod: tea.ModShift, Text: "Ж"}, keys.CommandMode},
-		{"table: ctrl+е is ctrl+t", tea.KeyPressMsg{Code: 'е', Mod: tea.ModCtrl}, keys.FuzzyFinder},
-		{"table: ctrl+ъ is ctrl+]", tea.KeyPressMsg{Code: 'ъ', Mod: tea.ModCtrl}, keys.ToggleThread},
-		{"basecode wins", tea.KeyPressMsg{Code: 'ш', BaseCode: 'i', Text: "ш"}, keys.InsertMode},
-		{"basecode shifted", tea.KeyPressMsg{Code: 'й', BaseCode: 'q', Mod: tea.ModShift, Text: "Й"}, keys.QuitConfirm},
+		{"table: о is j", tea.KeyPressMsg{Code: 'о', Text: "о"}, keys.Down, false},
+		{"table: л is k", tea.KeyPressMsg{Code: 'л', Text: "л"}, keys.Up, false},
+		{"table: legacy uppercase П is G", tea.KeyPressMsg{Code: 'П', Text: "П"}, keys.Bottom, false},
+		{"table: shift+ж is :", tea.KeyPressMsg{Code: 'ж', Mod: tea.ModShift, Text: "Ж"}, keys.CommandMode, false},
+		{"table: ctrl+е is ctrl+t", tea.KeyPressMsg{Code: 'е', Mod: tea.ModCtrl}, keys.FuzzyFinder, false},
+		{"table: ctrl+ъ is ctrl+]", tea.KeyPressMsg{Code: 'ъ', Mod: tea.ModCtrl}, keys.ToggleThread, false},
+		{"basecode wins", tea.KeyPressMsg{Code: 'ш', BaseCode: 'i', Text: "ш"}, keys.InsertMode, false},
+		{"ru legacy: . is /", tea.KeyPressMsg{Code: '.', Text: "."}, keys.SearchMode, true},
+		{"ru legacy: , is ?", tea.KeyPressMsg{Code: ',', Text: ","}, keys.Help, true},
+		{"ru basecode: . is /", tea.KeyPressMsg{Code: '.', BaseCode: '/', Text: "."}, keys.SearchMode, true},
+		{"ru basecode: shift+/ key is ?", tea.KeyPressMsg{Code: ',', BaseCode: '/', Mod: tea.ModShift, Text: ","}, keys.Help, true},
+		{"basecode shifted", tea.KeyPressMsg{Code: 'й', BaseCode: 'q', Mod: tea.ModShift, Text: "Й"}, keys.QuitConfirm, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := physicalKey(tc.in, true)
+			got := physicalKey(tc.in, true, tc.nonLatin)
 			if !key.Matches(got, tc.want) {
 				t.Fatalf("physicalKey(%q) = %q, want a match for %v", tc.in.String(), got.String(), tc.want.Keys())
 			}
@@ -35,15 +40,20 @@ func TestPhysicalKey(t *testing.T) {
 
 func TestPhysicalKey_LeavesTextAlone(t *testing.T) {
 	in := tea.KeyPressMsg{Code: 'о', BaseCode: 'j', Text: "о"}
-	if got := physicalKey(in, false); got.String() != "о" {
+	if got := physicalKey(in, false, true); got.String() != "о" {
 		t.Fatalf("text-entry key rewritten to %q", got.String())
 	}
 	ascii := tea.KeyPressMsg{Code: 'j', Text: "j"}
-	if got := physicalKey(ascii, true); got != tea.KeyMsg(ascii) {
+	if got := physicalKey(ascii, true, true); got != tea.KeyMsg(ascii) {
 		t.Fatalf("ASCII key changed: %#v", got)
 	}
+	// On a Latin layout `.` stays `.`.
+	dot := tea.KeyPressMsg{Code: '.', BaseCode: '.', Text: "."}
+	if got := physicalKey(dot, true, false); got.String() != "." {
+		t.Fatalf("latin . rewritten to %q", got.String())
+	}
 	// Chords are rewritten even while typing: ctrl+г clears compose like ctrl+u.
-	if got := physicalKey(tea.KeyPressMsg{Code: 'г', Mod: tea.ModCtrl}, false); got.String() != "ctrl+u" {
+	if got := physicalKey(tea.KeyPressMsg{Code: 'г', Mod: tea.ModCtrl}, false, true); got.String() != "ctrl+u" {
 		t.Fatalf("ctrl+г = %q, want ctrl+u", got.String())
 	}
 }
@@ -58,5 +68,16 @@ func TestHandleKey_RussianLayoutEntersInsertMode(t *testing.T) {
 	_ = a.handleKey(tea.KeyPressMsg{Code: 'ш', Text: "ш"})
 	if v := a.compose.Value(); v != "ш" {
 		t.Fatalf("compose = %q, want the Cyrillic letter typed as-is", v)
+	}
+}
+
+func TestHandleKey_RussianDotOpensSearch(t *testing.T) {
+	a := newTestAppWithMessages(t)
+	a.SetMode(ModeInsert)
+	_ = a.handleKey(tea.KeyPressMsg{Code: 'п', Text: "п"})
+	_ = a.handleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
+	_ = a.handleKey(tea.KeyPressMsg{Code: '.', Text: "."})
+	if a.mode != ModeSearch {
+		t.Fatalf("mode = %v, want search", a.mode)
 	}
 }
