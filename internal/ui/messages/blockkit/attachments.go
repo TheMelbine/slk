@@ -14,8 +14,17 @@ import (
 
 	"charm.land/lipgloss/v2"
 
+	"github.com/gammons/slk/internal/emoji"
 	imgpkg "github.com/gammons/slk/internal/image"
 )
+
+// resolveEmoji turns :shortcode: emoji in the plain-text parts of an
+// attachment (title, field labels, footer) into glyphs. Those parts
+// skip Context.RenderText because they are not mrkdwn, but Slack still
+// renders emoji in them; alerting bots put :red_circle: in the title.
+func resolveEmoji(s string) string {
+	return emoji.ResolveShortcodesInText(emoji.StripSkinToneFromText(s))
+}
 
 // stripeGlyph is the leading character on every line inside the
 // attachment's colored region.
@@ -90,7 +99,7 @@ func appendLegacyAttachment(out *RenderResult, a LegacyAttachment, ctx Context, 
 		if perf != nil {
 			t0 = time.Now()
 		}
-		title := a.Title
+		title := resolveEmoji(a.Title)
 		if a.TitleLink != "" {
 			title = "\x1b]8;;" + a.TitleLink + "\x1b\\" + title + "\x1b]8;;\x1b\\"
 		}
@@ -198,7 +207,7 @@ func appendLegacyAttachment(out *RenderResult, a LegacyAttachment, ctx Context, 
 		if perf != nil {
 			t0 = time.Now()
 		}
-		footer := a.Footer
+		footer := resolveEmoji(a.Footer)
 		if a.TS != 0 {
 			ts := time.Unix(a.TS, 0).UTC().Format("2006-01-02 3:04 PM")
 			if footer != "" {
@@ -293,7 +302,7 @@ func renderLegacyFields(fields []LegacyField, ctx Context, width int) []string {
 func renderLegacyField(f LegacyField, ctx Context, width int) []string {
 	var out []string
 	if f.Title != "" {
-		title := fieldLabelStyle().Render(f.Title)
+		title := fieldLabelStyle().Render(resolveEmoji(f.Title))
 		if lipgloss.Width(title) > width {
 			title = truncateToWidth(title, width)
 		}

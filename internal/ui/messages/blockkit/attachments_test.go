@@ -207,3 +207,24 @@ func TestRenderLegacyRendersNestedBlocks(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderLegacyResolvesEmojiInPlainParts(t *testing.T) {
+	ctx := Context{
+		RenderText: func(s string, _ map[string]string) string { return s },
+		WrapText:   func(s string, _ int) string { return s },
+	}
+	r := RenderLegacy([]LegacyAttachment{{
+		Title:  ":red_circle: FIRING: HostDown",
+		Fields: []LegacyField{{Title: ":fire: Severity", Value: "critical"}},
+		Footer: ":rocket: Alertmanager",
+	}}, ctx, 80)
+	plain := ansi.Strip(strings.Join(r.Lines, "\n"))
+	for _, want := range []string{"🔴", "🔥", "🚀"} {
+		if !strings.Contains(plain, want) {
+			t.Errorf("missing %s: %q", want, plain)
+		}
+	}
+	if strings.Contains(plain, ":red_circle:") {
+		t.Errorf("shortcode left unresolved: %q", plain)
+	}
+}
