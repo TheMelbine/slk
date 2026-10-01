@@ -38,5 +38,6 @@ func (a *App) renderEarlyFallback() (tea.View, bool) {
 	}
 	v := tea.NewView(screen)
 	v.AltScreen = true
+	v.KeyboardEnhancements.ReportAlternateKeys = true
 	return v, true
 }

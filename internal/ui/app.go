@@ -1048,6 +1048,8 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (a *App) handleKey(msg tea.KeyMsg) tea.Cmd {
+	msg = physicalKey(msg, !textEntryMode(a.mode))
+
 	// Ctrl+C is intercepted globally and routed through the same
 	// confirm prompt as lowercase `q`, so an accidental Ctrl+C while
 	// reading or typing doesn't yank the whole app out from under the
@@ -3438,6 +3440,9 @@ func (a *App) View() tea.View {
 
 	v := tea.NewView(screen)
 	v.AltScreen = true
+	// Ask for the US-layout key alongside the typed one so physicalKey
+	// can map a Russian-layout `о` to `j` without a lookup table.
+	v.KeyboardEnhancements.ReportAlternateKeys = true
 	v.MouseMode = tea.MouseModeCellMotion
 	// Ask the terminal to report focus gain/loss so reduceFocus can keep
 	// a.terminalFocused current. Bubble Tea diffs this against the
