@@ -348,6 +348,15 @@ func SelectionTintBgANSI(focused bool) string {
 // substring replacement would collide with literal digits in content
 // and with 256-color sub-arguments such as "38;5;40".
 func RepaintBgToSelectionTint(s string, focused bool) string {
+	if _, ok := styles.Background.(lipgloss.NoColor); ok {
+		// Transparent theme: inner spans paint no bg of their own, so
+		// every reset inside the row drops back to the terminal's bg and
+		// the tint survives only in the gaps. Re-tint after each reset,
+		// and turn the explicit default-bg escapes into the tint too.
+		tint := SelectionTintBgANSI(focused)
+		s = strings.ReplaceAll(s, BgANSI(), tint)
+		return ReapplyBgAfterResets(s, tint)
+	}
 	from := bgSGRParams(BgANSI())
 	to := bgSGRParams(SelectionTintBgANSI(focused))
 	if from == "" || from == to {

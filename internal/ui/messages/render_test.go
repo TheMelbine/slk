@@ -957,3 +957,19 @@ func TestANSIFor_NoColorIsTerminalDefault(t *testing.T) {
 		t.Errorf("fgANSIFor(NoColor) = %q", got)
 	}
 }
+
+// With a transparent theme background, inner spans carry no bg, so a
+// reset inside the selected row must be followed by the tint again.
+func TestRepaintBgToSelectionTint_TransparentTheme(t *testing.T) {
+	prev := styles.Background
+	styles.Background = lipgloss.NoColor{}
+	t.Cleanup(func() { styles.Background = prev })
+
+	tint := SelectionTintBgANSI(true)
+	in := "\x1b[1malice\x1b[m 18:05\x1b[0m\x1b[49m body"
+	got := RepaintBgToSelectionTint(in, true)
+	want := "\x1b[1malice\x1b[m" + tint + " 18:05\x1b[0m" + tint + tint + " body"
+	if got != want {
+		t.Fatalf("got  %q\nwant %q", got, want)
+	}
+}
