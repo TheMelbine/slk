@@ -59,7 +59,7 @@ slk --add-workspace --browser
 2. DevTools > Network, filter on `api/`, click a channel, then right click one
    of the requests > Copy > Copy as cURL (the bash, cmd and PowerShell forms
    all work).
-3. Paste it at the prompt. Nothing is echoed.
+3. Paste it at the prompt and press Enter. Nothing is echoed.
 
 The copied request carries both values slk needs: the `xoxc-` token and the
 `d` cookie, which is HttpOnly and cannot be read from the DevTools console. A

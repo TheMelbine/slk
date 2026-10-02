@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gammons/slk/internal/config"
 	slackclient "github.com/gammons/slk/internal/slack"
@@ -37,6 +38,19 @@ const (
 		"Invoke-WebRequest -UseBasicParsing -Uri \"https://acme.slack.com/api/client.counts\" `\n" +
 		"-Method \"POST\" `\n" +
 		"-WebSession $session `\n" +
+		"-Headers @{\n" +
+		"\"accept\"=\"*/*\"\n" +
+		"  \"origin\"=\"https://app.slack.com\"\n" +
+		"} `\n" +
+		"-ContentType \"application/x-www-form-urlencoded\" `\n" +
+		"-Body \"token=xoxc-9999-8888-aa&_x_reason=x\"\n"
+	// The PowerShell form without a $session: the cookie in the headers.
+	powershellHeadersCurl = "Invoke-WebRequest -UseBasicParsing -Uri \"https://acme.slack.com/api/client.counts\" `\n" +
+		"-Method POST `\n" +
+		"-Headers @{\n" +
+		"\"Accept\" = \"*/*\"\n" +
+		"\"Cookie\" = \"b=x; d=xoxd-ZZZ%2F%3D; d-s=17\"\n" +
+		"} `\n" +
 		"-Body \"token=xoxc-9999-8888-aa&_x_reason=x\"\n"
 )
 
@@ -48,9 +62,11 @@ func TestParseBrowserSession(t *testing.T) {
 		{"firefox, d-s before d", firefoxCurl, "xoxc-9999-8888-aa", "xoxd-ZZZ%2F%3D"},
 		{"chrome cmd", cmdCurl, "xoxc-1111-2222-3333-abcdef", "xoxd-AbC%2Fdef%2BGhi%3D%3D"},
 		{"chrome powershell", powershellCurl, "xoxc-9999-8888-aa", "xoxd-AbC%2Fdef"},
+		{"powershell, cookie in the headers", powershellHeadersCurl, "xoxc-9999-8888-aa", "xoxd-ZZZ%2F%3D"},
 		{"a cookie named xd before d", `-b 'xd=xoxd-WRONG; d=xoxd-RIGHT' token=xoxc-1`, "xoxc-1", "xoxd-RIGHT"},
 		{"a cookie named x-d before d", `-b 'x-d=xoxd-WRONG; d=xoxd-RIGHT' token=xoxc-1`, "xoxc-1", "xoxd-RIGHT"},
 		{"bare cookie, decoded", "xoxd-AbC/def+Ghi==\n", "", "xoxd-AbC%2Fdef%2BGhi%3D%3D"},
+		{"bare cookie, encoded, kept as is", "xoxd-AbC%2Fdef\n", "", "xoxd-AbC%2Fdef"},
 		{"cookie first in the header", `-H 'cookie: d=xoxd-A1; b=2' token=xoxc-1-2`, "xoxc-1-2", "xoxd-A1"},
 		{"bare token", "xoxc-1-2-3\n", "xoxc-1-2-3", ""},
 		{"bare cookie", "  xoxd-Q%2F\n", "", "xoxd-Q%2F"},
@@ -84,6 +100,10 @@ func TestPasteComplete(t *testing.T) {
 		{"$session = New-Object X\n", false},
 		{"$session = New-Object X\nInvoke-WebRequest -Uri \"x\" `\n", false},
 		{"$session = New-Object X\nInvoke-WebRequest -Uri \"x\" `\n-Body \"y\"\n", true},
+		{"Invoke-WebRequest -Uri \"x\" `\n-Headers @{\n", false},
+		{"Invoke-WebRequest -Uri \"x\" `\n-Headers @{\n\"a\"=\"b\"\n", false},
+		{"Invoke-WebRequest -Uri \"x\" `\n-Headers @{\n\"a\"=\"b\"\n} `\n", false},
+		{"Invoke-WebRequest -Uri \"x\" `\n-Headers @{\n\"a\"=\"b\"\n} `\n-Body \"y\"\n", true},
 	}
 	for _, tc := range tests {
 		if got := pasteComplete(tc.s); got != tc.want {
@@ -136,7 +156,8 @@ func TestReadPasteControlKeys(t *testing.T) {
 // tail, token and cookie included, for the shell to read.
 func TestReadPasteReadsEveryShapeWhole(t *testing.T) {
 	for name, paste := range map[string]string{
-		"chrome bash": chromeCurl, "firefox": firefoxCurl, "chrome cmd": cmdCurl, "chrome powershell": powershellCurl,
+		"chrome bash": chromeCurl, "firefox": firefoxCurl, "chrome cmd": cmdCurl,
+		"chrome powershell": powershellCurl, "powershell, cookie in the headers": powershellHeadersCurl,
 	} {
 		in := strings.ReplaceAll(paste, "\n", "\r") + "left over"
 		got, err := readPaste(strings.NewReader(in))
@@ -234,13 +255,84 @@ func TestBrowserLoginRun(t *testing.T) {
 	})
 }
 
-// Without a terminal there is nobody to ask: the desktop error comes back
-// as is, not wrapped.
-func TestOfferBrowserFallbackNotInteractive(t *testing.T) {
+func TestOfferBrowserFallback(t *testing.T) {
 	desktopErr := errors.New("slack desktop app config directory not found")
-	if err := offerBrowserFallback(false, nil, newOnboardingStyles(), desktopErr); err != desktopErr {
-		t.Errorf("err = %v, want the desktop error itself", err)
+	browserErr := errors.New("from the browser flow")
+	tests := []struct {
+		name        string
+		interactive bool
+		yes         bool
+		wantAsked   bool
+		want        error
+	}{
+		// Without a terminal there is nobody to ask: the desktop error
+		// comes back as is, not wrapped.
+		{"not a terminal", false, true, false, desktopErr},
+		{"declined", true, false, true, desktopErr},
+		{"accepted", true, true, true, browserErr},
 	}
+	for _, tc := range tests {
+		asked, ran := false, false
+		err := offerBrowserFallback(tc.interactive,
+			func() bool { asked = true; return tc.yes },
+			func() error { ran = true; return browserErr },
+			desktopErr)
+		if err != tc.want || asked != tc.wantAsked || ran != (tc.want == browserErr) {
+			t.Errorf("%s: err=%v asked=%v ran=%v, want err=%v asked=%v", tc.name, err, asked, ran, tc.want, tc.wantAsked)
+		}
+	}
+}
+
+// fakeTerminal is input arriving on a schedule, for drainInput: arrivals[i]
+// bytes land before poll i.
+type fakeTerminal struct {
+	arrivals []int
+	poll     int
+	queued   int
+	flushes  int
+	slept    time.Duration
+}
+
+func (f *fakeTerminal) pending() (int, error) {
+	if f.poll < len(f.arrivals) {
+		f.queued += f.arrivals[f.poll]
+	}
+	f.poll++
+	return f.queued, nil
+}
+func (f *fakeTerminal) flush() error          { f.flushes++; f.queued = 0; return nil }
+func (f *fakeTerminal) sleep(d time.Duration) { f.slept += d }
+
+func TestDrainInput(t *testing.T) {
+	t.Run("nothing pending: one quiet window", func(t *testing.T) {
+		f := &fakeTerminal{}
+		drainInput(f.pending, f.flush, f.sleep)
+		if f.slept != drainQuiet || f.queued != 0 {
+			t.Errorf("slept %v, queued %d, want %v and nothing left", f.slept, f.queued, drainQuiet)
+		}
+	})
+	t.Run("a tail arriving late is still discarded", func(t *testing.T) {
+		// 62 bytes 300 ms in, as over a slow SSH link.
+		f := &fakeTerminal{arrivals: []int{0, 0, 0, 0, 0, 0, 62}}
+		drainInput(f.pending, f.flush, f.sleep)
+		if f.queued != 0 || f.flushes < 2 {
+			t.Errorf("queued %d after %d flushes, want the tail flushed", f.queued, f.flushes)
+		}
+		if want := 7*drainPoll + drainQuiet; f.slept != want {
+			t.Errorf("slept %v, want %v (a full quiet window after the tail)", f.slept, want)
+		}
+	})
+	t.Run("input that never stops: bounded", func(t *testing.T) {
+		arrivals := make([]int, 1000)
+		for i := range arrivals {
+			arrivals[i] = 1
+		}
+		f := &fakeTerminal{arrivals: arrivals}
+		drainInput(f.pending, f.flush, f.sleep)
+		if f.slept > drainMax {
+			t.Errorf("slept %v, want at most %v", f.slept, drainMax)
+		}
+	})
 }
 
 func TestAddWorkspaceArgs(t *testing.T) {
@@ -296,5 +388,32 @@ func TestSaveWorkspaceTwiceKeepsConfigLoadable(t *testing.T) {
 	got, err := store.Load("T0123ABCD")
 	if err != nil || got.AccessToken != "xoxc-new" {
 		t.Errorf("token = (%+v, %v), want the refreshed one", got, err)
+	}
+}
+
+// A config.toml that already fails to load (a duplicate an earlier run left)
+// is not appended to: one more block cannot fix it.
+func TestSaveWorkspaceLeavesUnloadableConfigAlone(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	configPath := filepath.Join(dir, "slk", "config.toml")
+	// Broken by another workspace, so nothing else stops the append.
+	broken := "[workspaces.other]\nteam_id = \"T0999ZZZZ\"\n\n[workspaces.other-2]\nteam_id = \"T0999ZZZZ\"\n"
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configPath, []byte(broken), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	store := slackclient.NewTokenStore(filepath.Join(dir, "tokens"))
+	tok := slackclient.Token{AccessToken: "xoxc-1", Cookie: "xoxd-1", TeamID: "T0123ABCD", TeamName: "Acme", Domain: "acme"}
+	if err := saveWorkspace(store, tok, newOnboardingStyles()); err != nil {
+		t.Fatalf("saveWorkspace: %v", err)
+	}
+	if data, _ := os.ReadFile(configPath); string(data) != broken {
+		t.Errorf("config.toml changed:\n%s", data)
+	}
+	if _, err := store.Load("T0123ABCD"); err != nil {
+		t.Errorf("token not saved: %v", err)
 	}
 }

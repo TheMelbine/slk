@@ -52,7 +52,7 @@ const browserSessionSteps = `No Slack desktop app needed: sign in from your brow
   1. Open https://app.slack.com in your browser and sign in.
   2. DevTools > Network, filter on api/, click a channel, then right click
      one of the requests > Copy > Copy as cURL.
-  3. Paste it below (nothing is shown while you paste).
+  3. Paste it below and press Enter (nothing is shown while you paste).
 
 A bare xoxc- token works too; slk then asks for the d cookie
 (DevTools > Application > Cookies > https://app.slack.com).`
@@ -78,9 +78,10 @@ func parseBrowserSession(paste string) (token, cookie string) {
 
 // encodeCookie returns the d cookie in its URL-encoded form, the one the
 // desktop flow stores and the one Slack sends. DevTools' Application tab can
-// show it decoded (xoxd-AbC/def+Ghi==); an already encoded value is kept.
+// show it decoded (xoxd-AbC/def+Ghi==); an encoded value has none of /+= and
+// is kept as is.
 func encodeCookie(cookie string) string {
-	if cookie == "" || strings.Contains(cookie, "%") || !strings.ContainsAny(cookie, "/+=") {
+	if !strings.ContainsAny(cookie, "/+=") {
 		return cookie
 	}
 	return url.QueryEscape(cookie)
@@ -88,9 +89,11 @@ func encodeCookie(cookie string) string {
 
 // pasteComplete reports whether the text read so far ends a pasted command.
 // A line ending with a continuation (\ for bash, ^ for cmd, ` for
-// PowerShell) asks for more. The PowerShell form opens with "$session = ..."
-// lines that end with no continuation at all, so it is only complete once its
-// Invoke-WebRequest command is.
+// PowerShell) asks for more. The PowerShell form needs two more rules: it
+// opens with "$session = ..." lines that end with no continuation at all, so
+// it is only complete once its Invoke-WebRequest command is; and its
+// -Headers @{ ... } block spans lines that end with none either, so it is not
+// complete while a @{ is still open.
 func pasteComplete(s string) bool {
 	s = strings.TrimRight(s, "\n")
 	if strings.TrimSpace(s) == "" {
@@ -100,8 +103,17 @@ func pasteComplete(s string) bool {
 	if strings.HasSuffix(last, `\`) || strings.HasSuffix(last, "^") || strings.HasSuffix(last, "`") {
 		return false
 	}
-	if strings.HasPrefix(strings.TrimSpace(s), "$session") {
-		return strings.Contains(s, "Invoke-WebRequest")
+	if strings.HasPrefix(strings.TrimSpace(s), "$session") && !strings.Contains(s, "Invoke-WebRequest") {
+		return false
+	}
+	if strings.Contains(s, "Invoke-WebRequest") {
+		closed := 0
+		for _, line := range strings.Split(s, "\n") {
+			if strings.HasPrefix(strings.TrimSpace(line), "}") {
+				closed++
+			}
+		}
+		return strings.Count(s, "@{") <= closed
 	}
 	return true
 }
@@ -138,10 +150,32 @@ func readPaste(r io.Reader) (string, error) {
 	}
 }
 
-// pasteSettle is how long readSecret lets the rest of a paste arrive before
-// discarding it. A paste reaches the terminal in chunks; one that readPaste
-// stopped early on must not be left for the shell to read once slk exits.
-const pasteSettle = 150 * time.Millisecond
+// Whatever is still queued once readPaste stops (the tail of a paste it did
+// not recognise, keys typed meanwhile) holds secrets: it must not be left for
+// the shell to read once slk exits. A paste reaches the terminal in chunks,
+// slower over SSH, so a single flush right away can miss the tail. Input is
+// discarded until it has been quiet for drainQuiet, for drainMax at most.
+const (
+	drainPoll  = 50 * time.Millisecond
+	drainQuiet = 500 * time.Millisecond
+	drainMax   = 5 * time.Second
+)
+
+// drainInput discards pending input until none has arrived for drainQuiet,
+// or drainMax has passed. pending, flush and sleep are injected for tests.
+func drainInput(pending func() (int, error), flush func() error, sleep func(time.Duration)) {
+	quiet := time.Duration(0)
+	for total := time.Duration(0); total < drainMax && quiet < drainQuiet; total += drainPoll {
+		if n, err := pending(); err == nil && n > 0 {
+			_ = flush()
+			quiet = 0
+		} else {
+			quiet += drainPoll
+		}
+		sleep(drainPoll)
+	}
+	_ = flush()
+}
 
 // readSecret prints prompt and reads a paste without echoing it. From a pipe
 // it reads everything.
@@ -159,11 +193,12 @@ func readSecret(in *os.File, prompt string) (string, error) {
 	}
 	defer func() { _ = term.Restore(fd, old) }()
 
-	// A SIGTERM or SIGHUP while waiting for the paste skips the deferred
-	// Restore: put the terminal back before going.
+	// A signal while waiting for the paste skips the deferred Restore: put
+	// the terminal back before going. (Ctrl-C itself arrives as a byte in
+	// raw mode; SIGINT here is a kill -INT.)
 	sig := make(chan os.Signal, 1)
 	done := make(chan struct{})
-	signal.Notify(sig, syscall.SIGTERM, syscall.SIGHUP)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 	defer func() {
 		signal.Stop(sig)
 		close(done)
@@ -178,11 +213,7 @@ func readSecret(in *os.File, prompt string) (string, error) {
 	}()
 
 	s, err := readPaste(in)
-	// Whatever is still queued (the tail of a paste readPaste stopped on,
-	// or keys typed meanwhile) holds secrets: drop it rather than hand it
-	// to the shell.
-	time.Sleep(pasteSettle)
-	_ = flushInput(fd)
+	drainInput(func() (int, error) { return inputPending(fd) }, func() error { return flushInput(fd) }, time.Sleep)
 	return s, err
 }
 
@@ -244,22 +275,29 @@ func authBrowserSession(token, cookie string) (slackclient.Token, error) {
 }
 
 // offerBrowserFallback is called when the desktop session cannot be read. On
-// a terminal it offers the browser-session flow; otherwise it returns the
-// desktop error unchanged.
-func offerBrowserFallback(interactive bool, tokenStore *slackclient.TokenStore, st onboardingStyles, desktopErr error) error {
-	if !interactive {
+// a terminal it asks whether to run the browser-session flow instead;
+// otherwise, or on a no, it returns the desktop error unchanged. ask and
+// browser are injected for tests.
+func offerBrowserFallback(interactive bool, ask func() bool, browser func() error, desktopErr error) error {
+	if !interactive || !ask() {
 		return desktopErr
 	}
+	return browser()
+}
+
+// askBrowserFallback asks whether to sign in with a browser session; yes by
+// default, no when the form cannot run.
+func askBrowserFallback() bool {
 	useBrowser := true
 	confirm := huh.NewConfirm().
 		Title("Sign in with a browser session instead?").
 		Affirmative("Yes").
 		Negative("No").
 		Value(&useBrowser)
-	if err := huh.NewForm(huh.NewGroup(confirm)).WithTheme(huh.ThemeFunc(huh.ThemeDracula)).Run(); err != nil || !useBrowser {
-		return desktopErr
+	if err := huh.NewForm(huh.NewGroup(confirm)).WithTheme(huh.ThemeFunc(huh.ThemeDracula)).Run(); err != nil {
+		return false
 	}
-	return addWorkspaceFromBrowser(tokenStore, st)
+	return useBrowser
 }
 
 // addWorkspaceFromBrowser runs the browser-session flow against the terminal

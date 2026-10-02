@@ -52,16 +52,18 @@ func addWorkspace(forceBrowser bool) error {
 	fmt.Println(subtitleStyle.Render("Reading your signed-in workspaces from the Slack desktop app."))
 	fmt.Println()
 
+	browser := func() error { return addWorkspaceFromBrowser(tokenStore, st) }
+
 	// Read cookie + workspaces from the desktop app.
 	cookie, err := slackdesktop.Cookie()
 	if err != nil {
 		fmt.Println(errorStyle.Render("  " + desktopErrorMessage(err)))
-		return offerBrowserFallback(term.IsTerminal(int(os.Stdin.Fd())), tokenStore, st, err)
+		return offerBrowserFallback(term.IsTerminal(int(os.Stdin.Fd())), askBrowserFallback, browser, err)
 	}
 	workspaces, err := slackdesktop.Workspaces()
 	if err != nil {
 		fmt.Println(errorStyle.Render("  " + desktopErrorMessage(err)))
-		return offerBrowserFallback(term.IsTerminal(int(os.Stdin.Fd())), tokenStore, st, err)
+		return offerBrowserFallback(term.IsTerminal(int(os.Stdin.Fd())), askBrowserFallback, browser, err)
 	}
 
 	// Multi-select (all pre-selected).
@@ -143,11 +145,17 @@ func saveWorkspace(tokenStore *slackclient.TokenStore, tok slackclient.Token, st
 		return fmt.Errorf("saving token for %s: %w", tok.TeamName, err)
 	}
 	configPath := filepath.Join(xdgConfig(), "config.toml")
-	if cfg, err := config.Load(configPath); err == nil {
-		if _, ok := cfg.WorkspaceByTeamID(tok.TeamID); ok {
-			fmt.Println(st.success.Render("  Updated ") + st.dim.Render(tok.TeamName))
-			return nil
-		}
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		// Appending to a file that already fails to load (a duplicate an
+		// earlier run left) cannot fix it, and may add one more block.
+		fmt.Println(st.success.Render("  Added ") + st.dim.Render(tok.TeamName))
+		fmt.Println(st.dim.Render("  Note: config.toml does not load (" + err.Error() + "), left as is."))
+		return nil
+	}
+	if _, ok := cfg.WorkspaceByTeamID(tok.TeamID); ok {
+		fmt.Println(st.success.Render("  Updated ") + st.dim.Render(tok.TeamName))
+		return nil
 	}
 	slug := uniqueSlug(config.Slugify(tok.TeamName), existingSlugs(configPath))
 	if err := appendWorkspaceConfigBlock(configPath, slug, tok.TeamID, tok.TeamName); err != nil {

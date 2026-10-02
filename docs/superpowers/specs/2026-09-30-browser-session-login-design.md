@@ -23,12 +23,14 @@ getslk.sh/install still documents it (issue #141).
 - The paste is read with the terminal in raw mode, without echo, until the
   command is complete: a line that does not end with a continuation (`\` bash,
   `^` cmd, a backtick for PowerShell, whose `$session` lines only end once its
-  `Invoke-WebRequest` does), or Ctrl-D; Ctrl-C cancels. Canonical mode would
+  `Invoke-WebRequest` does and whose `-Headers @{ ... }` block only ends at its
+  `}`), or Ctrl-D; Ctrl-C cancels. Canonical mode would
   truncate lines past 4095 bytes, which a cURL line with its cookies can reach.
 - Whatever is still queued once reading stops (the tail of a paste, keys typed
-  meanwhile) is flushed from the terminal input after a short settle delay,
-  so no token or cookie is left for the shell to read. The terminal is
-  restored by a defer, and on SIGTERM / SIGHUP.
+  meanwhile) is flushed from the terminal input until the input has been
+  quiet for 500 ms (5 s at most), so no token or cookie is left for the shell
+  to read, even when a paste arrives in chunks over SSH. The terminal is
+  restored by a defer, and on SIGINT / SIGTERM / SIGHUP.
 - The cmd form's caret escapes are stripped before parsing; the PowerShell
   form's cookie is read from its `System.Net.Cookie("d", ...)`. A cookie pasted
   decoded (`xoxd-AbC/def+Ghi==`) is URL-encoded, as the desktop flow stores it.
@@ -38,7 +40,8 @@ getslk.sh/install still documents it (issue #141).
   `[workspaces.<slug>]` block are identical. Re-adding a team already in
   `config.toml` only refreshes its token: a second block for the same
   `team_id` would make `config.Load` reject the file (the general fix for the
-  desktop flow is #148).
+  desktop flow is #148). A `config.toml` that already fails to load is left
+  alone: one more block cannot fix it.
 
 ## Limits
 

@@ -8,3 +8,10 @@ import "golang.org/x/sys/windows"
 func flushInput(fd int) error {
 	return windows.FlushConsoleInputBuffer(windows.Handle(fd))
 }
+
+// inputPending returns how many console input events wait to be read.
+func inputPending(fd int) (int, error) {
+	var n uint32
+	err := windows.GetNumberOfConsoleInputEvents(windows.Handle(fd), &n)
+	return int(n), err
+}
