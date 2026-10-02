@@ -23,12 +23,14 @@ import (
 // The rule now:
 //   - Engine code reads and writes names only through this store, from
 //     any goroutine.
-//   - The UI never sees the store. It is handed a Snapshot (a private
-//     copy) in WorkspaceReadyMsg / WorkspaceSwitchedMsg. Once NotifyFrom
-//     has been called with that snapshot, every Set that adds or
-//     changes a name is reported to the notifier, which sends it to the
-//     UI as UserResolvedMsg. So callers just Set; reaching the UI is the
-//     store's job, not something each caller has to remember.
+//   - The UI never sees the store. It is handed a copy from SnapshotForUI
+//     in WorkspaceReadyMsg / WorkspaceSwitchedMsg, which is the UI's from
+//     then on (it writes it). Once NotifyFrom has been called with the
+//     version SnapshotForUI returned alongside it (never the map itself),
+//     every Set that adds or changes a name is reported to the notifier,
+//     which sends it to the UI as UserResolvedMsg. So callers just Set;
+//     reaching the UI is the store's job, not something each caller has
+//     to remember.
 //
 // A nil *userNameStore reads as empty and drops writes, so helpers whose
 // name source is optional (tests, cache-only renders) can pass nil.
