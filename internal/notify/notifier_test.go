@@ -275,3 +275,49 @@ func TestNotify_CommandBodyIsNotInjected(t *testing.T) {
 		t.Errorf("body not passed literally: got %q, want %q", got, want)
 	}
 }
+
+func TestShouldNotify_FollowedThread(t *testing.T) {
+	base := NotifyContext{
+		CurrentUserID:   "U1",
+		ActiveChannelID: "C1",
+		IsActiveWS:      true,
+		OnThread:        true,
+		ThreadFollowed:  true,
+	}
+	// A reply is not visible in the channel feed, so viewing the channel
+	// does not suppress it; neither does a muted channel.
+	muted := base
+	muted.IsMuted = true
+	if !ShouldNotify(muted, "C1", "U2", "reply", "channel") {
+		t.Error("reply in a followed thread should notify, even in the active, muted channel")
+	}
+
+	open := base
+	open.ThreadOpen = true
+	if ShouldNotify(open, "C1", "U2", "reply", "channel") {
+		t.Error("should not notify while the thread is on screen")
+	}
+
+	if ShouldNotify(base, "C1", "U1", "reply", "channel") {
+		t.Error("should not notify for own reply")
+	}
+
+	dnd := base
+	dnd.IsDND = true
+	if ShouldNotify(dnd, "C1", "U2", "reply", "channel") {
+		t.Error("should not notify during DND")
+	}
+
+	off := base
+	off.OnThread = false
+	if ShouldNotify(off, "C1", "U2", "reply", "channel") {
+		t.Error("on_thread = false should leave the reply to the other rules")
+	}
+
+	unfollowed := base
+	unfollowed.ThreadFollowed = false
+	unfollowed.ActiveChannelID = "C_OTHER"
+	if ShouldNotify(unfollowed, "C1", "U2", "reply", "channel") {
+		t.Error("reply in an unfollowed thread should not notify")
+	}
+}

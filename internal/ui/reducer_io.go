@@ -119,6 +119,15 @@ var reduceIO reducerFunc = func(a *App, msg tea.Msg) (tea.Cmd, bool) {
 	case statusbar.MarkUnreadFailedMsg:
 		return toastWithClear(a, "Mark unread failed: "+truncateReason(m.Reason, 40), 3*time.Second), true
 
+	case statusbar.ThreadFollowedMsg:
+		if m.Following {
+			return toastWithClear(a, "Following thread", 2*time.Second), true
+		}
+		return toastWithClear(a, "Unfollowed thread", 2*time.Second), true
+
+	case statusbar.ThreadFollowFailedMsg:
+		return toastWithClear(a, "Follow failed: "+truncateReason(m.Reason, 40), 3*time.Second), true
+
 	case statusbar.ThreadSavedMsg:
 		return toastWithClear(a, "Saved "+filepath.Base(m.Path), 2*time.Second), true
 

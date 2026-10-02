@@ -156,6 +156,22 @@ WHERE workspace_id=? AND channel_id=? AND thread_ts=?`
 	return lastRead, nil
 }
 
+// ThreadSubscriptionState returns a thread's read cursor and whether the
+// user follows it. A missing row reads as ("", false): not followed.
+func (db *DB) ThreadSubscriptionState(workspaceID, channelID, threadTS string) (lastRead string, active bool, err error) {
+	const q = `SELECT last_read, active FROM thread_subscriptions
+WHERE workspace_id=? AND channel_id=? AND thread_ts=?`
+	var activeInt int
+	err = db.conn.QueryRow(q, workspaceID, channelID, threadTS).Scan(&lastRead, &activeInt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("reading thread subscription: %w", err)
+	}
+	return lastRead, activeInt == 1, nil
+}
+
 // ListActiveThreadSubscriptions returns every active subscription in
 // the given workspace, in PRIMARY KEY order. Tombstoned rows
 // (active=0) are filtered out.

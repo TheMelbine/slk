@@ -1273,6 +1273,13 @@ func run() error {
 				}
 				ensureWorkspaceThreadSubs(ctx, wctx, db, p.Send)
 			},
+			ToggleFollow: func(channelID ids.ChannelID, threadTS ids.ThreadTS) core.Msg {
+				wctx := router.Active()
+				if wctx == nil || wctx.Client == nil {
+					return nil
+				}
+				return toggleThreadFollow(wctx.Client, db, wctx.TeamID, string(channelID), string(threadTS), time.Now())
+			},
 			ThreadLastRead: func(channelID ids.ChannelID, threadTS ids.ThreadTS) string {
 				wctx := router.Active()
 				if wctx == nil {
@@ -1538,6 +1545,7 @@ func run() error {
 				channelTypes:    channelTypes,
 				workspaceName:   wctx.TeamName,
 				activeChannelID: func() string { return app.ActiveChannelID() },
+				openThread:      func() (string, string) { return app.OpenThread() },
 				cfg:             cfgSnap,
 				wsCtx:           wctx,
 				backfillGate:    dedupeGate{window: 30 * time.Second},

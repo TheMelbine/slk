@@ -334,6 +334,9 @@ func handleNormalMode(a *App, msg tea.KeyMsg) tea.Cmd {
 	case key.Matches(msg, a.keys.MarkUnread):
 		return a.markUnreadOfSelected()
 
+	case key.Matches(msg, a.keys.FollowThread):
+		return a.toggleFollowOfSelected()
+
 	case key.Matches(msg, a.keys.NextUnread):
 		return a.jumpToUnread(1)
 

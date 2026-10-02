@@ -439,6 +439,14 @@ type MarkedUnreadMsg struct{}
 // CopiedClearMsg.
 type MarkUnreadFailedMsg struct{ Reason string }
 
+// ThreadFollowedMsg is delivered when the user followed (Following) or
+// unfollowed a thread.
+type ThreadFollowedMsg struct{ Following bool }
+
+// ThreadFollowFailedMsg is delivered when following or unfollowing a
+// thread failed.
+type ThreadFollowFailedMsg struct{ Reason string }
+
 // ThreadSavedMsg is delivered when a thread has been saved to a markdown file.
 type ThreadSavedMsg struct{ Path string }
 

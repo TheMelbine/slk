@@ -123,9 +123,11 @@ type Animations struct {
 }
 
 type Notifications struct {
-	Enabled    bool     `toml:"enabled"`
-	OnMention  bool     `toml:"on_mention"`
-	OnDM       bool     `toml:"on_dm"`
+	Enabled   bool `toml:"enabled"`
+	OnMention bool `toml:"on_mention"`
+	OnDM      bool `toml:"on_dm"`
+	// OnThread notifies on every reply in a thread you follow.
+	OnThread   bool     `toml:"on_thread"`
 	OnKeyword  []string `toml:"on_keyword"`
 	QuietHours string   `toml:"quiet_hours"`
 	// NotifyCommand, when set, runs instead of the built-in OS notification.
@@ -218,6 +220,7 @@ func Default() Config {
 			Enabled:   true,
 			OnMention: true,
 			OnDM:      true,
+			OnThread:  true,
 		},
 		Cache: CacheConfig{
 			MessageRetentionDays: 30,

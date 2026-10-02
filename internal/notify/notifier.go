@@ -60,6 +60,9 @@ type NotifyContext struct {
 	OnKeyword       []string
 	IsDND           bool // when true, ShouldNotify always returns false
 	IsMuted         bool // when true (conversation is muted), ShouldNotify always returns false
+	OnThread        bool // notify on replies in followed threads
+	ThreadFollowed  bool // the message is a reply in a thread the user follows
+	ThreadOpen      bool // that thread is on screen right now
 }
 
 // ShouldNotify returns true if a message should trigger a desktop notification.
@@ -72,6 +75,14 @@ func ShouldNotify(ctx NotifyContext, channelID, userID, text, channelType string
 	// Suppress entirely while DND/snoozed.
 	if ctx.IsDND {
 		return false
+	}
+
+	// A reply in a followed thread notifies unless the thread is on screen.
+	// Checked before mute and the active-channel rule: following a thread is
+	// the narrower, later choice, and a reply is not visible in the channel
+	// feed anyway.
+	if ctx.OnThread && ctx.ThreadFollowed {
+		return !ctx.ThreadOpen
 	}
 
 	// Suppress notifications from a muted conversation — a muted channel or DM

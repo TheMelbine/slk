@@ -39,6 +39,7 @@
 | `E` | Normal (message) | Edit your own message |
 | `D` | Normal (message) | Delete your own message (with confirmation) |
 | `U` | Normal (message) | Mark selected message and everything newer as unread |
+| `f` | Normal (message) | Follow or unfollow the thread of the selected message (Slack's "Get notified about new replies") |
 | `S` | Normal (thread) | Save thread to markdown file (`~/.local/share/slk/exports/` or `$XDG_DATA_HOME/slk/exports/`) |
 | `y` | Normal (message) | Copy message text |
 | `Y` / `C` | Normal (message) | Copy message permalink |

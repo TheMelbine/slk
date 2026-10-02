@@ -44,6 +44,7 @@ type KeyMap struct {
 	OpenLink            key.Binding
 	DownloadFile        key.Binding
 	MarkUnread          key.Binding
+	FollowThread        key.Binding
 	NextUnread          key.Binding
 	PrevUnread          key.Binding
 	ActivityView        key.Binding
@@ -113,6 +114,7 @@ func DefaultKeyMap() KeyMap {
 		OpenLink:        key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open link in message")),
 		DownloadFile:    key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "download file in message")),
 		MarkUnread:      key.NewBinding(key.WithKeys("U"), key.WithHelp("U", "mark unread")),
+		FollowThread:    key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "follow / unfollow thread")),
 		NextUnread:      key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "next unread channel")),
 		PrevUnread:      key.NewBinding(key.WithKeys("A"), key.WithHelp("A", "prev unread channel")),
 		ActivityView:    key.NewBinding(key.WithKeys("ctrl+a"), key.WithHelp("ctrl+a", "open activity")),

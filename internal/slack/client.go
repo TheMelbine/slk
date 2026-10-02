@@ -1323,6 +1323,34 @@ func (c *Client) markThread(ctx context.Context, channelID, threadTS, ts string,
 	return parseOKResponse("subscriptions.thread.mark", raw)
 }
 
+// SetThreadSubscription follows (subscribe=true) or unfollows a thread,
+// the web client's "Get notified about new replies" toggle. channelID is
+// the parent channel and threadTS the parent message ts. lastRead is the
+// read cursor the subscription starts from; replies after it count as
+// unread. Slack echoes the change as a thread_subscribed /
+// thread_unsubscribed WS event.
+func (c *Client) SetThreadSubscription(ctx context.Context, channelID, threadTS, lastRead string, subscribe bool) error {
+	if channelID == "" || threadTS == "" {
+		return nil
+	}
+	if lastRead == "" {
+		lastRead = threadTS
+	}
+	method := "subscriptions.thread.remove"
+	if subscribe {
+		method = "subscriptions.thread.add"
+	}
+	raw, err := c.postForm(ctx, method, url.Values{
+		"channel":   {channelID},
+		"thread_ts": {threadTS},
+		"last_read": {lastRead},
+	})
+	if err != nil {
+		return err
+	}
+	return parseOKResponse(method, raw)
+}
+
 // MarkChannel marks a channel as read up to the given timestamp.
 func (c *Client) MarkChannel(ctx context.Context, channelID, ts string) error {
 	return c.markChannel(ctx, channelID, ts)

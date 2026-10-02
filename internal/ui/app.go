@@ -3246,6 +3246,15 @@ func (a *App) ActiveChannelID() string {
 	return a.activeChannelID
 }
 
+// OpenThread returns the thread shown in the thread panel, or ("", "")
+// when the panel is closed.
+func (a *App) OpenThread() (channelID, threadTS string) {
+	if !a.threadVisible {
+		return "", ""
+	}
+	return a.threadPanel.ChannelID(), a.threadPanel.ThreadTS()
+}
+
 // SetWorkspaceService wires workspace switching.
 func (a *App) SetWorkspaceService(s core.WorkspaceService) {
 	a.workspaceSvc = s
@@ -4128,6 +4137,33 @@ func (a *App) markUnreadOfSelected() tea.Cmd {
 		}
 	}
 	return nil
+}
+
+// toggleFollowOfSelected follows or unfollows the thread the selection
+// belongs to. In the thread pane that is the open thread; in the channel
+// pane it is the thread the selected message roots or replies in. A
+// message without replies can be followed too, as in Slack.
+func (a *App) toggleFollowOfSelected() tea.Cmd {
+	var channelID, threadTS string
+	switch a.focusedPanel {
+	case PanelThread:
+		channelID, threadTS = a.threadPanel.ChannelID(), a.threadPanel.ThreadTS()
+	case PanelMessages:
+		msg, ok := a.messagepane.SelectedMessage()
+		if !ok {
+			return nil
+		}
+		channelID, threadTS = a.activeChannelID, msg.ThreadTS
+		if threadTS == "" {
+			threadTS = msg.TS
+		}
+	}
+	if channelID == "" || threadTS == "" {
+		return nil
+	}
+	return func() tea.Msg {
+		return ToggleThreadFollowMsg{ChannelID: channelID, ThreadTS: threadTS}
+	}
 }
 
 // openImagePreviewOfSelected dispatches OpenImagePreviewMsg for the

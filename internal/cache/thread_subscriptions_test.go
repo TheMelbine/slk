@@ -422,3 +422,24 @@ func TestUpdateThreadLastReadIfExists_RejectsEmptyKey(t *testing.T) {
 		t.Error("want error for empty threadTS, got nil")
 	}
 }
+
+func TestThreadSubscriptionState(t *testing.T) {
+	db := setupDBWithWorkspace(t)
+	lastRead, active, err := db.ThreadSubscriptionState("T1", "C1", "P1")
+	if err != nil || lastRead != "" || active {
+		t.Fatalf("missing row = (%q, %v, %v), want (\"\", false, nil)", lastRead, active, err)
+	}
+	if err := db.UpsertThreadSubscription("T1", "C1", "P1", "R5", true); err != nil {
+		t.Fatal(err)
+	}
+	lastRead, active, err = db.ThreadSubscriptionState("T1", "C1", "P1")
+	if err != nil || lastRead != "R5" || !active {
+		t.Fatalf("followed row = (%q, %v, %v), want (R5, true, nil)", lastRead, active, err)
+	}
+	if err := db.UpsertThreadSubscription("T1", "C1", "P1", "R5", false); err != nil {
+		t.Fatal(err)
+	}
+	if _, active, _ = db.ThreadSubscriptionState("T1", "C1", "P1"); active {
+		t.Error("tombstoned row reads as followed")
+	}
+}

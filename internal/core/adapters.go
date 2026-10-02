@@ -86,6 +86,7 @@ type ThreadServiceFuncs struct {
 	ListFetch           ThreadsListFetchFunc
 	EnsureSubscriptions func(teamID ids.TeamID)
 	ThreadLastRead      func(channelID ids.ChannelID, threadTS ids.ThreadTS) string
+	ToggleFollow        func(channelID ids.ChannelID, threadTS ids.ThreadTS) Msg
 }
 
 // NewThreadService builds a ThreadService from a ThreadServiceFuncs
@@ -656,6 +657,13 @@ type OlderMessagesFetchFunc func(channelID ids.ChannelID, oldestTS ids.MessageTS
 
 // MessageSendFunc is called when the user sends a message. Returns a Msg with the result.
 type MessageSendFunc func(channelID ids.ChannelID, text string) Msg
+
+func (t threadAdapter) ToggleFollow(channelID ids.ChannelID, threadTS ids.ThreadTS) Msg {
+	if t.fns.ToggleFollow == nil {
+		return nil
+	}
+	return t.fns.ToggleFollow(channelID, threadTS)
+}
 
 // MessageForwardFunc forwards a message within the captured workspace,
 // without producing normal send/compose events.

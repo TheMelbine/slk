@@ -28,6 +28,7 @@ typing_indicators = true
 enabled = true
 on_mention = true
 on_dm = true
+on_thread = true              # every reply in a thread you follow (`f` toggles)
 on_keyword = ["deploy", "incident"]
 quiet_hours = "22:00-08:00"   # planned
 

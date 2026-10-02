@@ -2682,6 +2682,28 @@ func TestMarkUnreadOfSelected_ChannelPane_EmitsMarkUnreadMsg(t *testing.T) {
 	}
 }
 
+func TestToggleFollowOfSelected_ChannelPane(t *testing.T) {
+	app := NewApp()
+	app.activeChannelID = "C1"
+	app.messagepane.SetMessages([]messages.MessageItem{
+		{TS: "1.0", UserID: "U_OTHER", Text: "root"},
+		{TS: "2.0", UserID: "U_OTHER", Text: "broadcast reply", ThreadTS: "1.0"},
+	})
+	app.focusedPanel = PanelMessages
+
+	for i, want := range []string{"1.0", "1.0"} {
+		app.messagepane.SelectByIndex(i)
+		cmd := app.toggleFollowOfSelected()
+		if cmd == nil {
+			t.Fatalf("message %d: expected non-nil cmd", i)
+		}
+		got, ok := cmd().(ToggleThreadFollowMsg)
+		if !ok || got.ChannelID != "C1" || got.ThreadTS != want {
+			t.Errorf("message %d: got %+v, want thread %s in C1", i, got, want)
+		}
+	}
+}
+
 func TestMarkUnreadOfSelected_OldestMessage_BoundaryIsZero(t *testing.T) {
 	app := NewApp()
 	app.activeChannelID = "C1"

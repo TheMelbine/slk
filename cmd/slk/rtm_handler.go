@@ -39,6 +39,9 @@ type rtmEventHandler struct {
 	channelTypes    map[string]string
 	workspaceName   string
 	activeChannelID func() string
+	// openThread reports the thread on screen, ("", "") when the thread
+	// panel is closed. nil in tests.
+	openThread func() (channelID, threadTS string)
 
 	// cfg is the loaded user config; used by OnConversationOpened to
 	// resolve sidebar section + section order via buildChannelItem.
@@ -203,6 +206,19 @@ func (h *rtmEventHandler) OnMessage(channelID, userID, ts, text, threadTS, subty
 			IsDND:           h.wsCtx != nil && h.wsCtx.DNDEnabled && (h.wsCtx.DNDEndTS.IsZero() || time.Now().Before(h.wsCtx.DNDEndTS)),
 			IsMuted:         h.wsCtx != nil && h.wsCtx.MuteStore != nil && h.wsCtx.MuteStore.IsMuted(channelID),
 		}
+		isReply := threadTS != "" && threadTS != ts
+		if isReply && h.notifyCfg.OnThread && h.db != nil {
+			ctx.OnThread = true
+			if _, followed, err := h.db.ThreadSubscriptionState(h.workspaceID, channelID, threadTS); err != nil {
+				debuglog.Notify("thread subscription lookup %s/%s: %v", channelID, threadTS, err)
+			} else {
+				ctx.ThreadFollowed = followed
+			}
+			if isActiveWS && h.openThread != nil {
+				openCh, openTS := h.openThread()
+				ctx.ThreadOpen = openCh == channelID && openTS == threadTS
+			}
+		}
 		chType := h.channelTypes[channelID]
 		// Pass the raw userID (not authorID): ShouldNotify's self-message
 		// suppression keys on the human sender, and a bot message
@@ -219,6 +235,9 @@ func (h *rtmEventHandler) OnMessage(channelID, userID, ts, text, threadTS, subty
 			title := h.workspaceName + ": #" + chName
 			if chType == "dm" || chType == "group_dm" {
 				title = h.workspaceName + ": " + senderName
+			}
+			if ctx.ThreadFollowed {
+				title += " (thread)"
 			}
 			var groupNames map[string]string
 			if h.wsCtx != nil {

@@ -31,6 +31,10 @@
 //	ThreadsListLoadedMsg        - threads-list fetch returned: push
 //	                              summaries + refresh badge, re-open
 //	                              the highlighted thread if visible.
+//	ToggleThreadFollowMsg       - user pressed follow: call
+//	                              ThreadService.ToggleFollow.
+//	ThreadFollowToggledMsg      - follow result: toast, and on success
+//	                              mark the threads list stale.
 //	ThreadsListDirtyMsg         - "the list might be stale" from any of
 //	                              its uncoordinated senders: open a
 //	                              coalescing window, or join the open
@@ -305,6 +309,29 @@ var reduceThreads reducerFunc = func(a *App, msg tea.Msg) (tea.Cmd, bool) {
 			return cmd, true
 		}
 		return nil, true
+
+	case ToggleThreadFollowMsg:
+		threads := a.threads
+		if threads == nil {
+			return nil, true
+		}
+		chID, threadTS := ids.ChannelID(m.ChannelID), ids.ThreadTS(m.ThreadTS)
+		return func() tea.Msg {
+			return threads.ToggleFollow(chID, threadTS)
+		}, true
+
+	case ThreadFollowToggledMsg:
+		if m.Err != nil {
+			reason := m.Err.Error()
+			return func() tea.Msg {
+				return statusbar.ThreadFollowFailedMsg{Reason: reason}
+			}, true
+		}
+		following, team := m.Following, m.TeamID
+		return tea.Batch(
+			func() tea.Msg { return statusbar.ThreadFollowedMsg{Following: following} },
+			func() tea.Msg { return ThreadsListDirtyMsg{TeamID: team} },
+		), true
 
 	case ThreadsListDirtyMsg:
 		// Team check first: a dirty message for another workspace must

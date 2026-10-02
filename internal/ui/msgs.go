@@ -604,6 +604,23 @@ type MarkUnreadMsg struct {
 	UnreadCount int
 }
 
+// ToggleThreadFollowMsg requests the App to follow or unfollow the
+// thread rooted at ThreadTS in ChannelID.
+type ToggleThreadFollowMsg struct {
+	ChannelID string
+	ThreadTS  string
+}
+
+// ThreadFollowToggledMsg carries the result of ThreadService.ToggleFollow.
+// Following is the state after the call; it is meaningless when Err is set.
+type ThreadFollowToggledMsg struct {
+	TeamID    string
+	ChannelID string
+	ThreadTS  string
+	Following bool
+	Err       error
+}
+
 // MessageMarkedUnreadMsg carries the result of a MarkUnreadFunc call.
 // On success Err is nil and the App's Update arm applies the local
 // state changes (move the unread boundary, update the sidebar badge,

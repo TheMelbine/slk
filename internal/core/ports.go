@@ -98,6 +98,11 @@ type ThreadService interface {
 	// thread replies never advance it, so it is systematically stale and
 	// puts the divider too early. Optional; "" disables the boundary.
 	ThreadLastRead(channelID ids.ChannelID, threadTS ids.ThreadTS) string
+
+	// ToggleFollow follows the thread when the user does not follow it
+	// and unfollows it otherwise (subscriptions.thread.add / .remove).
+	// Returns a Msg (typically ThreadFollowToggledMsg).
+	ToggleFollow(channelID ids.ChannelID, threadTS ids.ThreadTS) Msg
 }
 
 // ActivityService is the App's interface to Slack's Activity feed
