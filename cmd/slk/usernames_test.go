@@ -26,7 +26,7 @@ func TestUINameNotifier_DoesNotBlockTheCaller(t *testing.T) {
 	}
 
 	s := newUserNameStore(nil)
-	s.NotifyFrom(nil, uiNameNotifier("T1", send))
+	s.NotifyFrom(0, uiNameNotifier("T1", send))
 
 	done := make(chan struct{})
 	go func() {
@@ -92,8 +92,8 @@ func TestUserNameStore_ConcurrentAccess(t *testing.T) {
 		}(g)
 	}
 	wg.Wait()
-	if got := len(s.Snapshot()); got != 8*200 {
-		t.Errorf("len(Snapshot()) = %d, want %d", got, 8*200)
+	if snap := s.Snapshot(); len(snap) != 8*200 {
+		t.Errorf("len(Snapshot()) = %d, want %d", len(snap), 8*200)
 	}
 }
 
@@ -109,7 +109,7 @@ func TestUserNameStore_NilIsEmpty(t *testing.T) {
 	if snap := s.Snapshot(); snap == nil || len(snap) != 0 {
 		t.Errorf("nil store Snapshot() = %v, want empty non-nil map", snap)
 	}
-	s.NotifyFrom(nil, func(string, string) {}) // must not panic
+	s.NotifyFrom(0, func(string, string) {}) // must not panic
 }
 
 // recordLearned returns a notifier that records what it was told.
@@ -137,13 +137,13 @@ func recordLearned() (func(string, string), func() map[string]string) {
 // would otherwise be in neither, and render as a raw ID forever.
 func TestUserNameStore_NotifyFromCoversTheHandoffGap(t *testing.T) {
 	s := newUserNameStore(map[string]string{"U1": "Alice"})
-	snap := s.Snapshot()
+	_, since := s.SnapshotForUI()
 
 	s.Set("U2", "Bob")      // learned in the gap: new
 	s.Set("U1", "Alice B.") // learned in the gap: changed
 
 	notify, got := recordLearned()
-	s.NotifyFrom(snap, notify)
+	s.NotifyFrom(since, notify)
 
 	want := map[string]string{"U2": "Bob", "U1": "Alice B."}
 	if g := got(); len(g) != 2 || g["U2"] != want["U2"] || g["U1"] != want["U1"] {
@@ -158,7 +158,8 @@ func TestUserNameStore_NotifyFromCoversTheHandoffGap(t *testing.T) {
 func TestUserNameStore_NotifiesNewAndChangedOnly(t *testing.T) {
 	s := newUserNameStore(map[string]string{"U1": "Alice"})
 	notify, got := recordLearned()
-	s.NotifyFrom(s.Snapshot(), notify)
+	_, since := s.SnapshotForUI()
+	s.NotifyFrom(since, notify)
 
 	s.Set("U1", "Alice") // unchanged: silent
 	if g := got(); len(g) != 0 {
@@ -171,14 +172,19 @@ func TestUserNameStore_NotifiesNewAndChangedOnly(t *testing.T) {
 	}
 }
 
-// TestUserNameStore_SetBeforeNotifyIsSilent: connect seeds thousands of
-// cached users before the workspace is ready. None of that may turn
-// into per-user messages; the Ready snapshot carries it.
-func TestUserNameStore_SetBeforeNotifyIsSilent(t *testing.T) {
-	s := newUserNameStore(nil)
-	s.Set("U1", "Alice") // no notifier yet: must not panic or report
-	if name, _ := s.Get("U1"); name != "Alice" {
-		t.Errorf("Get(U1) = %q, want Alice", name)
+// TestUserNameStore_SeedIsNotReported: connect seeds thousands of
+// cached users before the workspace is ready. The Ready snapshot carries
+// them; none may also turn into per-user messages once notifying starts.
+func TestUserNameStore_SeedIsNotReported(t *testing.T) {
+	s := newUserNameStore(map[string]string{"U1": "Alice"})
+	s.Set("U2", "Bob") // connect-time write, before any notifier
+	_, since := s.SnapshotForUI()
+
+	notify, got := recordLearned()
+	s.NotifyFrom(since, notify)
+	s.Set("U1", "Alice") // re-Set of a seeded name, unchanged
+	if g := got(); len(g) != 0 {
+		t.Errorf("seeded or unchanged names were reported: %v", g)
 	}
 }
 

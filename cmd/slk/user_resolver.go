@@ -175,13 +175,12 @@ func (r *userResolver) resolveOne(userID string) {
 	// to falsely flag.
 	isExternal := u.TeamID != "" && u.TeamID != r.teamID
 	// Persist to the cache DB (its own goroutine-safe SQLite
-	// connection) and the avatar cache (internal RWMutex). The
-	// resolver holds no name store; the UI learns the name from the
-	// UserResolvedMsg below, applied on the UI goroutine via
-	// Model.PatchUserName. Subsequent resolveUserCached misses fall
-	// back to the DB row we just upserted (and record it in
-	// wctx.UserNames), so we don't re-fetch on every miss in the
-	// small window before UserResolvedMsg lands.
+	// connection), the avatar cache (internal RWMutex) and the name
+	// store (r.names; see the Set below). The UserResolvedMsg below
+	// is applied on the UI goroutine via Model.PatchUserName.
+	// Subsequent resolveUserCached misses fall back to the DB row we
+	// just upserted, so we don't re-fetch on every miss in the small
+	// window before UserResolvedMsg lands.
 	r.avatars.Preload(userID, u.Profile.Image32)
 	_ = r.db.UpsertUser(cache.User{
 		ID:               userID,

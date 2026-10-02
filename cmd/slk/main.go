@@ -1371,7 +1371,9 @@ func run() error {
 		channels := withPeerStatuses(wctx.Channels, statuses)
 
 		snap := workspacesStore.Snapshot()
-		switchNames := wctx.UserNames.Snapshot()
+		// switchNames goes to the UI, which owns (and writes) it from
+		// then on; only switchSeq is kept for AfterSwitch.
+		switchNames, switchSeq := wctx.UserNames.SnapshotForUI()
 		return ui.WorkspaceSwitchedMsg{
 			TeamID:       wctx.TeamID,
 			TeamName:     wctx.TeamName,
@@ -1399,11 +1401,11 @@ func run() error {
 				return nil
 			},
 			// Reports every name this workspace learned since
-			// switchNames was taken (including while it was inactive,
+			// the switch snapshot was taken (including while it was inactive,
 			// when its UserResolvedMsgs were dropped), then keeps
 			// reporting. Run by the reducer after the switch applies.
 			AfterSwitch: func() tea.Msg {
-				wctx.UserNames.NotifyFrom(switchNames, uiNameNotifier(wctx.TeamID, p.Send))
+				wctx.UserNames.NotifyFrom(switchSeq, uiNameNotifier(wctx.TeamID, p.Send))
 				return nil
 			},
 		}
@@ -1588,7 +1590,9 @@ func run() error {
 
 			readyStatuses := cachedPeerStatuses(db, wctx.TeamID)
 			wctx.PeerStatus.SeedHuddles(readyStatuses)
-			readyNames := wctx.UserNames.Snapshot()
+			// readyNames goes to the UI, which owns (and writes) it from
+			// then on; only readySeq is kept for NotifyFrom below.
+			readyNames, readySeq := wctx.UserNames.SnapshotForUI()
 			p.Send(ui.WorkspaceReadyMsg{
 				TeamID:       wctx.TeamID,
 				TeamName:     wctx.TeamName,
@@ -1613,7 +1617,7 @@ func run() error {
 			// p.Send above has returned, so the Update loop has taken
 			// the Ready message; anything the notifier sends is
 			// processed after it.
-			wctx.UserNames.NotifyFrom(readyNames, uiNameNotifier(wctx.TeamID, p.Send))
+			wctx.UserNames.NotifyFrom(readySeq, uiNameNotifier(wctx.TeamID, p.Send))
 
 			// Fetch the workspace's custom emoji in the background. When
 			// done, a follow-up message makes rendering and the emoji

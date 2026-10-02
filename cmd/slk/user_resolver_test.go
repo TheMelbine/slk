@@ -797,4 +797,21 @@ func TestUserResolver_RecordsNamesInStore(t *testing.T) {
 			t.Errorf("store U2 = (%q, %v); want (\"Bob\", true)", name, ok)
 		}
 	})
+	t.Run("bots.info", func(t *testing.T) {
+		srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true,"bot":{"id":"B1","name":"deploybot","icons":{}}}`))
+		}))
+		defer srv.Close()
+		db := newTestDB(t)
+		watch := newResolvedWatch(1, nil)
+		r := newUserResolver("T1", newTestClient(t, srv), db, nil, watch.send, nil, nil)
+		store := newUserNameStore(nil)
+		r.names = store
+		r.RequestBot("B1", "")
+		<-watch.done
+		if name, ok := store.Get("B1"); !ok || name != "deploybot" {
+			t.Errorf("store B1 = (%q, %v); want (\"deploybot\", true)", name, ok)
+		}
+	})
 }

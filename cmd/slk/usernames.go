@@ -1,10 +1,10 @@
 package main
 
 import (
-	"regexp"
 	"sync"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/gammons/slk/internal/slackfmt"
 	"github.com/gammons/slk/internal/ui"
 )
 
@@ -35,6 +35,13 @@ import (
 type userNameStore struct {
 	mu    sync.RWMutex
 	names map[string]string
+	// seq counts the Sets that added or changed a name; changed[id] is
+	// the seq of id's latest such Set. That is how NotifyFrom finds the
+	// names learned since a snapshot without a map to compare against:
+	// the snapshot map belongs to the UI, which writes it, so reading it
+	// here would be exactly the race this type exists to prevent.
+	seq     uint64
+	changed map[string]uint64
 	// notify, once set by NotifyFrom, is told of every Set that adds or
 	// changes a name. Called outside mu.
 	notify func(userID, name string)
@@ -47,7 +54,7 @@ func newUserNameStore(seed map[string]string) *userNameStore {
 	for id, name := range seed {
 		names[id] = name
 	}
-	return &userNameStore{names: names}
+	return &userNameStore{names: names, changed: map[string]uint64{}}
 }
 
 // Get returns the display name recorded for userID.
@@ -69,22 +76,32 @@ func (s *userNameStore) Set(userID, name string) {
 	}
 	s.mu.Lock()
 	old, had := s.names[userID]
+	if had && old == name {
+		s.mu.Unlock()
+		return
+	}
 	s.names[userID] = name
+	s.seq++
+	s.changed[userID] = s.seq
 	notify := s.notify
 	s.mu.Unlock()
-	if notify != nil && (!had || old != name) {
+	if notify != nil {
 		notify(userID, name)
 	}
 }
 
-// NotifyFrom installs notify and immediately reports every name that
-// differs from base, the snapshot the UI was last handed. That closes
-// the gap between taking a snapshot and the UI applying it: a name Set
-// in between is in neither the snapshot nor (if the UI drops messages
-// for a workspace it has not switched to yet) a message, so it is
-// reported here instead. Call it once the UI has applied base; calling
-// it again (each workspace switch) just repeats the reconciliation.
-func (s *userNameStore) NotifyFrom(base map[string]string, notify func(userID, name string)) {
+// NotifyFrom installs notify and immediately reports every name added
+// or changed after since, the version SnapshotForUI returned with the
+// map the UI was handed. That closes the gap between taking the
+// snapshot and the UI applying it: a name Set in between is in neither
+// the snapshot nor (if the UI drops messages for a workspace it has not
+// switched to yet) a message, so it is reported here instead.
+//
+// Installing the notifier and finding the gap happen under one lock, so
+// a concurrent Set is either already in the gap or sees the notifier
+// and reports itself. Call it once the UI has applied the snapshot;
+// calling it again (each workspace switch) just repeats the catch-up.
+func (s *userNameStore) NotifyFrom(since uint64, notify func(userID, name string)) {
 	if s == nil {
 		return
 	}
@@ -92,9 +109,9 @@ func (s *userNameStore) NotifyFrom(base map[string]string, notify func(userID, n
 	s.mu.Lock()
 	s.notify = notify
 	var gap []entry
-	for id, name := range s.names {
-		if old, ok := base[id]; !ok || old != name {
-			gap = append(gap, entry{id, name})
+	for id, at := range s.changed {
+		if at > since {
+			gap = append(gap, entry{id, s.names[id]})
 		}
 	}
 	s.mu.Unlock()
@@ -122,12 +139,19 @@ func uiNameNotifier(teamID string, send func(tea.Msg)) func(userID, name string)
 }
 
 // Snapshot returns an independent copy of every recorded name. The
-// caller owns the result; nothing else holds a reference to it. This is
-// the only way a name map leaves the store, and it is how the UI gets
-// one.
+// caller owns the result; nothing else holds a reference to it.
 func (s *userNameStore) Snapshot() map[string]string {
+	m, _ := s.SnapshotForUI()
+	return m
+}
+
+// SnapshotForUI is Snapshot plus the store's version at that moment,
+// which is what NotifyFrom needs to report exactly the names learned
+// after the snapshot. The map goes to the UI and is the UI's from then
+// on (it writes it); keep only the version.
+func (s *userNameStore) SnapshotForUI() (map[string]string, uint64) {
 	if s == nil {
-		return map[string]string{}
+		return map[string]string{}, 0
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -135,12 +159,8 @@ func (s *userNameStore) Snapshot() map[string]string {
 	for id, name := range s.names {
 		out[id] = name
 	}
-	return out
+	return out, s.seq
 }
-
-// mentionIDRe matches a Slack user mention, <@U…>, capturing the ID.
-// Same shape slackfmt and the renderer use.
-var mentionIDRe = regexp.MustCompile(`<@([A-Z0-9]+)>`)
 
 // MentionedNames returns the recorded names of just the users mentioned
 // in text, as a fresh map the caller owns. For one-off rendering (a
@@ -148,9 +168,9 @@ var mentionIDRe = regexp.MustCompile(`<@([A-Z0-9]+)>`)
 // be wasteful.
 func (s *userNameStore) MentionedNames(text string) map[string]string {
 	out := map[string]string{}
-	for _, m := range mentionIDRe.FindAllStringSubmatch(text, -1) {
-		if name, ok := s.Get(m[1]); ok {
-			out[m[1]] = name
+	for _, id := range slackfmt.MentionedUserIDs(text) {
+		if name, ok := s.Get(id); ok {
+			out[id] = name
 		}
 	}
 	return out

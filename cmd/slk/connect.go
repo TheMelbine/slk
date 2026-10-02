@@ -124,8 +124,8 @@ func connectWorkspace(ctx context.Context, token slackclient.Token, db *cache.DB
 	}
 
 	// Construct the per-workspace async user resolver. It writes
-	// resolved display names to the cache DB and emits
-	// UserResolvedMsg back into the bubbletea program; the UI's
+	// resolved display names to the cache DB and the name store, and
+	// emits UserResolvedMsg back into the bubbletea program; the UI's
 	// Update handler patches its own name map on the UI goroutine
 	// via Model.PatchUserName. The UI's map is a snapshot of
 	// wctx.UserNames, never the store itself. p may be nil in tests, in which case

@@ -38,9 +38,9 @@ func lookupUserCached(userID string, userNames *userNameStore, db *cache.DB) (st
 
 // resolveUserCached is lookupUserCached plus memoization: a DB hit is
 // recorded in the store so subsequent lookups skip SQLite. Safe from
-// any goroutine (the store is locked). It does not tell the UI: the
-// name was already in SQLite, so whoever rendered it with a placeholder
-// has an async resolve on the way. Returns ("", false) when the user is
+// any goroutine (the store is locked). Recording it is also how the
+// name reaches the UI, if the UI has not seen it: the store reports
+// new names (see userNameStore). Returns ("", false) when the user is
 // unknown — caller is expected to fall back to userID-as-name and
 // enqueue an async lookup via wctx.UserResolver.Request.
 func resolveUserCached(userID string, userNames *userNameStore, db *cache.DB) (string, bool) {
@@ -62,9 +62,9 @@ func resolveUserCached(userID string, userNames *userNameStore, db *cache.DB) (s
 // fast-path miss is irrelevant for them.
 //
 // Runs on the DM-sweep goroutine. A name fetched from the network is
-// recorded in the store AND sent as UserResolvedMsg: the UI holds a
-// snapshot of the store, so the message is how the name reaches it
-// (until 2026-10-02 the UI shared the map and saw the write, racily).
+// recorded in the store (which reports it to the UI once notifying) and
+// also sent as UserResolvedMsg directly, so the sweep works before the
+// store's notifier is installed.
 func resolveUser(client *slackclient.Client, userID string, userNames *userNameStore, db *cache.DB, avatarCache *avatar.Cache, send func(tea.Msg)) (string, bool) {
 	if name, ok := userNames.Get(userID); ok {
 		// Check if avatar is also cached
