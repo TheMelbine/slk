@@ -715,6 +715,19 @@ type ChannelJoinFailedMsg struct {
 	Err  error
 }
 
+// ToggleChannelStarMsg requests the App to star or unstar ChannelID.
+type ToggleChannelStarMsg struct {
+	ChannelID string
+}
+
+// ChannelStarToggledMsg carries the result of ChannelService.ToggleStar.
+// Starred is the state after the call; it is meaningless when Err is set.
+type ChannelStarToggledMsg struct {
+	ChannelID string
+	Starred   bool
+	Err       error
+}
+
 // previewLoadedMsg is dispatched after a preview thumb has been fetched.
 // The receiver constructs (or, when isCycle is set, swaps the image of)
 // an imgpkg.Preview and stores it on the App.

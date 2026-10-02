@@ -241,6 +241,11 @@ type ChannelService interface {
 	// reducer can drop late results from cancelled submits.
 	OpenConversation(userIDs []string, requestID uint64) Cmd
 
+	// ToggleStar stars the channel when it is not starred and unstars
+	// it otherwise (stars.add / stars.remove), then re-syncs the
+	// sidebar sections. Returns a Msg (typically ChannelStarToggledMsg).
+	ToggleStar(channelID ids.ChannelID) Msg
+
 	// SearchRemote asks the server which channels match query,
 	// including ones the user has not joined, and blocks until it
 	// answers. Callers run it from a Cmd, debounced — see

@@ -1725,6 +1725,24 @@ func (c *Client) GetStarredChannels(ctx context.Context) ([]string, error) {
 	return ids, nil
 }
 
+// SetChannelStar stars (star=true) or unstars a channel through
+// stars.add / stars.remove. Starred channels form the sidebar's Starred
+// section.
+func (c *Client) SetChannelStar(ctx context.Context, channelID string, star bool) error {
+	if channelID == "" {
+		return nil
+	}
+	method := "stars.remove"
+	if star {
+		method = "stars.add"
+	}
+	raw, err := c.postForm(ctx, method, url.Values{"channel": {channelID}})
+	if err != nil {
+		return err
+	}
+	return parseOKResponse(method, raw)
+}
+
 // GetChannelSections calls users.channelSections.list and returns the
 // fully-paginated section list. Loops on the top-level cursor until the
 // server reports no more sections. Per-section channel_ids_page pagination

@@ -526,3 +526,35 @@ func TestSectionForChannel_HidesRedactedSections(t *testing.T) {
 		t.Errorf("C_REDACTED → (%q, %v), want ('', false) for redacted section", id, ok)
 	}
 }
+
+func TestSectionStore_IsStarred(t *testing.T) {
+	store := NewSectionStore()
+	client := &fakeSectionsClient{
+		sections: []slk.SidebarSection{
+			{ID: "S_STARS", Type: "stars"},
+			{ID: "S_ENG", Type: "standard", Name: "Eng", ChannelIDs: []string{"C2"}},
+		},
+		starIDs: []string{"C1"},
+	}
+	if err := store.Bootstrap(context.Background(), client); err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	if !store.IsStarred("C1") {
+		t.Error("C1 is in stars.list, want starred")
+	}
+	if store.IsStarred("C2") || store.IsStarred("C_UNKNOWN") {
+		t.Error("a channel outside the stars section reads as starred")
+	}
+
+	// Unstarring the last channel: a re-bootstrap must clear it.
+	// The fake hands out its slice, which the first Bootstrap filled in;
+	// Slack returns the stars section empty every time.
+	client.sections[0].ChannelIDs = nil
+	client.starIDs = nil
+	if err := store.Bootstrap(context.Background(), client); err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	if store.IsStarred("C1") {
+		t.Error("C1 still starred after stars.list came back empty")
+	}
+}

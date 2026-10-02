@@ -2682,6 +2682,25 @@ func TestMarkUnreadOfSelected_ChannelPane_EmitsMarkUnreadMsg(t *testing.T) {
 	}
 }
 
+func TestToggleStarOfSelected_OpenChannel(t *testing.T) {
+	app := NewApp()
+	app.activeChannelID = "C1"
+	app.focusedPanel = PanelMessages
+
+	cmd := app.toggleStarOfSelected()
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd")
+	}
+	if got, ok := cmd().(ToggleChannelStarMsg); !ok || got.ChannelID != "C1" {
+		t.Errorf("got %+v, want ToggleChannelStarMsg for C1", got)
+	}
+
+	app.activeChannelID = ""
+	if app.toggleStarOfSelected() != nil {
+		t.Error("no open channel: expected nil cmd")
+	}
+}
+
 func TestToggleFollowOfSelected_ChannelPane(t *testing.T) {
 	app := NewApp()
 	app.activeChannelID = "C1"

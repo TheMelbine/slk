@@ -255,6 +255,7 @@ type ChannelServiceFuncs struct {
 	MembershipFetch  func(channelID ids.ChannelID)
 	OpenConversation func(userIDs []string, requestID uint64) Cmd
 	SearchRemote     func(query string) []ChannelFinderItem
+	ToggleStar       func(channelID ids.ChannelID) Msg
 }
 
 // NewChannelService builds a ChannelService from a
@@ -321,6 +322,13 @@ func (c channelAdapter) Join(channelID ids.ChannelID, channelName string) Msg {
 		return nil
 	}
 	return c.fns.Join(channelID, channelName)
+}
+
+func (c channelAdapter) ToggleStar(channelID ids.ChannelID) Msg {
+	if c.fns.ToggleStar == nil {
+		return nil
+	}
+	return c.fns.ToggleStar(channelID)
 }
 
 func (c channelAdapter) RecordVisit(channelID ids.ChannelID) {

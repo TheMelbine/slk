@@ -119,6 +119,15 @@ var reduceIO reducerFunc = func(a *App, msg tea.Msg) (tea.Cmd, bool) {
 	case statusbar.MarkUnreadFailedMsg:
 		return toastWithClear(a, "Mark unread failed: "+truncateReason(m.Reason, 40), 3*time.Second), true
 
+	case statusbar.ChannelStarredMsg:
+		if m.Starred {
+			return toastWithClear(a, "Starred channel", 2*time.Second), true
+		}
+		return toastWithClear(a, "Unstarred channel", 2*time.Second), true
+
+	case statusbar.ChannelStarFailedMsg:
+		return toastWithClear(a, "Star failed: "+truncateReason(m.Reason, 40), 3*time.Second), true
+
 	case statusbar.ThreadFollowedMsg:
 		if m.Following {
 			return toastWithClear(a, "Following thread", 2*time.Second), true

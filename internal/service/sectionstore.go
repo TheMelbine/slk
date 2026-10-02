@@ -152,6 +152,14 @@ func (s *SectionStore) PopulateStars(channelIDs []string) {
 	}
 }
 
+// IsStarred reports whether channelID sits in the stars section.
+func (s *SectionStore) IsStarred(channelID string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	sec, ok := s.sectionsByID[s.channelToSection[channelID]]
+	return ok && sec.Type == "stars"
+}
+
 // SectionForChannel returns the renderable section ID a channel belongs
 // to. Returns ok=false when the store isn't ready, the channel isn't
 // indexed, OR the indexed section is not renderable in the sidebar

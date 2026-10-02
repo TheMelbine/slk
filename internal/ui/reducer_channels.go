@@ -24,6 +24,12 @@
 //	ChannelMembershipMsg          - membership fetch landed:
 //	                                push to the cache used by
 //	                                mention picker / DM resolution.
+//	ToggleChannelStarMsg          - user pressed star: call
+//	                                ChannelService.ToggleStar.
+//	ChannelStarToggledMsg         - star result: toast. The sidebar
+//	                                moves the channel on the
+//	                                SectionsRefreshedMsg the service
+//	                                sends.
 //	ChannelJoinedMsg              - finder-driven join succeeded:
 //	                                add to sidebar + open it.
 //	ChannelJoinFailedMsg          - finder-driven join failed:
@@ -62,6 +68,7 @@ import (
 	"github.com/gammons/slk/internal/debuglog"
 	"github.com/gammons/slk/internal/ids"
 	"github.com/gammons/slk/internal/ui/sidebar"
+	"github.com/gammons/slk/internal/ui/statusbar"
 )
 
 var reduceChannels reducerFunc = func(a *App, msg tea.Msg) (tea.Cmd, bool) {
@@ -203,6 +210,28 @@ var reduceChannels reducerFunc = func(a *App, msg tea.Msg) (tea.Cmd, bool) {
 	case ChannelMembershipMsg:
 		a.SetChannelMembership(m.ChannelID, m.MemberIDs)
 		return nil, true
+
+	case ToggleChannelStarMsg:
+		channels := a.channels
+		if channels == nil {
+			return nil, true
+		}
+		chID := ids.ChannelID(m.ChannelID)
+		return func() tea.Msg {
+			return channels.ToggleStar(chID)
+		}, true
+
+	case ChannelStarToggledMsg:
+		if m.Err != nil {
+			reason := m.Err.Error()
+			return func() tea.Msg {
+				return statusbar.ChannelStarFailedMsg{Reason: reason}
+			}, true
+		}
+		starred := m.Starred
+		return func() tea.Msg {
+			return statusbar.ChannelStarredMsg{Starred: starred}
+		}, true
 
 	case ChannelJoinedMsg:
 		// Add the newly-joined channel to the sidebar (so it shows

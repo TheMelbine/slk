@@ -902,6 +902,13 @@ func run() error {
 				}
 				return ui.MessagesAroundLoadedMsg{ChannelID: chIDStr, TargetTS: string(ts), Messages: msgItems}
 			},
+			ToggleStar: func(channelID ids.ChannelID) core.Msg {
+				wctx := router.Active()
+				if wctx == nil || wctx.Client == nil {
+					return nil
+				}
+				return toggleChannelStar(wctx, string(channelID))
+			},
 			Join: func(channelID ids.ChannelID, channelName string) core.Msg {
 				chIDStr := string(channelID)
 				wctx := router.Active()

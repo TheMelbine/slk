@@ -439,6 +439,13 @@ type MarkedUnreadMsg struct{}
 // CopiedClearMsg.
 type MarkUnreadFailedMsg struct{ Reason string }
 
+// ChannelStarredMsg is delivered when the user starred (Starred) or
+// unstarred a channel.
+type ChannelStarredMsg struct{ Starred bool }
+
+// ChannelStarFailedMsg is delivered when starring or unstarring failed.
+type ChannelStarFailedMsg struct{ Reason string }
+
 // ThreadFollowedMsg is delivered when the user followed (Following) or
 // unfollowed a thread.
 type ThreadFollowedMsg struct{ Following bool }

@@ -4139,6 +4139,25 @@ func (a *App) markUnreadOfSelected() tea.Cmd {
 	return nil
 }
 
+// toggleStarOfSelected stars or unstars a channel: the one under the
+// sidebar cursor when the sidebar has focus, the open one otherwise.
+func (a *App) toggleStarOfSelected() tea.Cmd {
+	channelID := a.activeChannelID
+	if a.focusedPanel == PanelSidebar {
+		item, ok := a.sidebar.SelectedItem()
+		if !ok {
+			return nil
+		}
+		channelID = item.ID
+	}
+	if channelID == "" {
+		return nil
+	}
+	return func() tea.Msg {
+		return ToggleChannelStarMsg{ChannelID: channelID}
+	}
+}
+
 // toggleFollowOfSelected follows or unfollows the thread the selection
 // belongs to. In the thread pane that is the open thread; in the channel
 // pane it is the thread the selected message roots or replies in. A
