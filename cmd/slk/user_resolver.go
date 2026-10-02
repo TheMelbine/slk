@@ -73,6 +73,12 @@ type userResolver struct {
 	pendingMu  sync.Mutex
 	pending    map[string]struct{}
 	flushTimer *time.Timer
+
+	// names is the workspace's name store (wctx.UserNames). Every name
+	// the resolver fetches is Set here as well as in SQLite: the store
+	// is what the UI is handed on a workspace switch, and its notifier
+	// is how a name reaches an already-showing UI. Nil (tests) skips it.
+	names *userNameStore
 }
 
 func newUserResolver(
@@ -169,18 +175,12 @@ func (r *userResolver) resolveOne(userID string) {
 	// to falsely flag.
 	isExternal := u.TeamID != "" && u.TeamID != r.teamID
 	// Persist to the cache DB (its own goroutine-safe SQLite
-	// connection) and the avatar cache (internal RWMutex), but
-	// do NOT write r.userNames[userID] from this goroutine —
-	// userNames is a plain map shared with the UI goroutine and
-	// other code paths, and a direct write here trips Go's
-	// "concurrent map writes" detector under load (two parallel
-	// Request goroutines for different userIDs is enough). The
-	// UserResolvedMsg below is delivered to the bubbletea Update
-	// loop, which calls Model.PatchUserName on the UI goroutine
-	// — that is the single safe writer for in-history rows.
-	// Subsequent resolveUserCached misses fall back to the DB
-	// row we just upserted, so we don't re-fetch on every miss
-	// in the small window before UserResolvedMsg lands.
+	// connection), the avatar cache (internal RWMutex) and the name
+	// store (r.names; see the Set below). The UserResolvedMsg below
+	// is applied on the UI goroutine via Model.PatchUserName.
+	// Subsequent resolveUserCached misses fall back to the DB row we
+	// just upserted, so we don't re-fetch on every miss in the small
+	// window before UserResolvedMsg lands.
 	r.avatars.Preload(userID, u.Profile.Image32)
 	_ = r.db.UpsertUser(cache.User{
 		ID:               userID,
@@ -197,6 +197,10 @@ func (r *userResolver) resolveOne(userID string) {
 		HuddleState:      u.Profile.HuddleState,
 		HuddleExpiration: int64(u.Profile.HuddleStateExpirationTS),
 	})
+	// In the store too, so the name survives for this workspace's next
+	// switch snapshot even if the UserResolvedMsg below is dropped
+	// because the workspace is not the active one.
+	r.names.Set(userID, name)
 	if r.send != nil {
 		// Status before UserResolvedMsg, which callers treat as the
 		// end of this user's resolution.
@@ -357,6 +361,7 @@ func (r *userResolver) applyEdgeUser(u edge.User) {
 		HuddleExpiration: u.Profile.HuddleStateExpirationTS,
 		Version:          u.Version,
 	})
+	r.names.Set(u.ID, name) // see resolveOne
 	if r.send != nil {
 		// Status before UserResolvedMsg, as in resolveOne.
 		r.send(ui.UserStatusChangeMsg{
@@ -423,6 +428,7 @@ func (r *userResolver) RequestBot(botID, username string) {
 			Presence:    "away",
 			IsBot:       true,
 		})
+		r.names.Set(botID, name) // see resolveOne
 		if r.send != nil {
 			r.send(ui.UserResolvedMsg{
 				TeamID:      r.teamID,

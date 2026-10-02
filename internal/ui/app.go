@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"image"
 	"log"
+	"maps"
 	"mime"
 	"os"
 	"path/filepath"
@@ -1613,8 +1614,13 @@ func (a *App) saveThreadToFile() tea.Cmd {
 	}
 	parent := a.threadPanel.ParentMsg()
 	replies := a.threadPanel.Replies()
-	userNames := a.threadPanel.UserNames()
-	channelNames := a.threadPanel.ChannelNames()
+	// Cloned: the export runs in the Cmd goroutine below, and the
+	// thread panel's userNames is written on the UI goroutine by
+	// PatchUserName. Handing the live map across is the
+	// concurrent-map race the 2026-10-02 crash fix removed from
+	// cmd/slk; channelNames is cloned for the same reason.
+	userNames := maps.Clone(a.threadPanel.UserNames())
+	channelNames := maps.Clone(a.threadPanel.ChannelNames())
 
 	channelName := "thread"
 	if channelNames != nil {

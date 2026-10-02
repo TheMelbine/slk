@@ -960,7 +960,7 @@ func run() error {
 					return ui.MessageSendFailedMsg{ChannelID: chIDStr, Reason: err.Error()}
 				}
 				userName := "you"
-				if resolved, ok := userNames[client.UserID()]; ok {
+				if resolved, ok := userNames.Get(client.UserID()); ok {
 					userName = resolved
 				}
 				return ui.MessageSentMsg{
@@ -1194,7 +1194,7 @@ func run() error {
 					return ui.ThreadReplySendFailedMsg{ChannelID: chIDStr, ThreadTS: threadTSStr, Reason: err.Error()}
 				}
 				userName := "you"
-				if resolved, ok := userNames[client.UserID()]; ok {
+				if resolved, ok := userNames.Get(client.UserID()); ok {
 					userName = resolved
 				}
 				// Broadcast replies surface in the parent channel feed as
@@ -1371,15 +1371,20 @@ func run() error {
 		channels := withPeerStatuses(wctx.Channels, statuses)
 
 		snap := workspacesStore.Snapshot()
+		// switchNames goes to the UI, which owns (and writes) it from
+		// then on; only switchSeq is kept for AfterSwitch.
+		switchNames, switchSeq := wctx.UserNames.SnapshotForUI()
 		return ui.WorkspaceSwitchedMsg{
-			TeamID:           wctx.TeamID,
-			TeamName:         wctx.TeamName,
-			Domain:           wctx.Client.TeamSubdomain(),
-			Theme:            snap.ResolveTheme(teamID),
-			SidebarWidth:     snap.ResolveWidth(teamID),
-			Channels:         channels,
-			FinderItems:      wctx.FinderItems,
-			UserNames:        wctx.UserNames,
+			TeamID:       wctx.TeamID,
+			TeamName:     wctx.TeamName,
+			Domain:       wctx.Client.TeamSubdomain(),
+			Theme:        snap.ResolveTheme(teamID),
+			SidebarWidth: snap.ResolveWidth(teamID),
+			Channels:     channels,
+			FinderItems:  wctx.FinderItems,
+			// A private copy: the UI must never share a map with the
+			// engine's goroutines (see userNameStore).
+			UserNames:        switchNames,
 			UserStatuses:     statuses,
 			ExternalUsers:    external,
 			UserID:           wctx.UserID,
@@ -1393,6 +1398,14 @@ func run() error {
 				ctx, cancel := context.WithTimeout(context.Background(), dndRefreshTimeout)
 				defer cancel()
 				wctx.PeerStatus.RefreshDND(ctx, workspacePresenceIDs(wctx))
+				return nil
+			},
+			// Reports every name this workspace learned since
+			// the switch snapshot was taken (including while it was inactive,
+			// when its UserResolvedMsgs were dropped), then keeps
+			// reporting. Run by the reducer after the switch applies.
+			AfterSwitch: func() tea.Msg {
+				wctx.UserNames.NotifyFrom(switchSeq, uiNameNotifier(wctx.TeamID, p.Send))
 				return nil
 			},
 		}
@@ -1577,15 +1590,20 @@ func run() error {
 
 			readyStatuses := cachedPeerStatuses(db, wctx.TeamID)
 			wctx.PeerStatus.SeedHuddles(readyStatuses)
+			// readyNames goes to the UI, which owns (and writes) it from
+			// then on; only readySeq is kept for NotifyFrom below.
+			readyNames, readySeq := wctx.UserNames.SnapshotForUI()
 			p.Send(ui.WorkspaceReadyMsg{
-				TeamID:           wctx.TeamID,
-				TeamName:         wctx.TeamName,
-				Domain:           wctx.Client.TeamSubdomain(),
-				Theme:            cfgSnap.ResolveTheme(wctx.TeamID),
-				SidebarWidth:     cfgSnap.ResolveWidth(wctx.TeamID),
-				Channels:         wctx.Channels,
-				FinderItems:      wctx.FinderItems,
-				UserNames:        wctx.UserNames,
+				TeamID:       wctx.TeamID,
+				TeamName:     wctx.TeamName,
+				Domain:       wctx.Client.TeamSubdomain(),
+				Theme:        cfgSnap.ResolveTheme(wctx.TeamID),
+				SidebarWidth: cfgSnap.ResolveWidth(wctx.TeamID),
+				Channels:     wctx.Channels,
+				FinderItems:  wctx.FinderItems,
+				// A private copy: the UI must never share a map with
+				// the engine's goroutines (see userNameStore).
+				UserNames:        readyNames,
 				UserStatuses:     readyStatuses,
 				ExternalUsers:    external,
 				UserID:           wctx.UserID,
@@ -1595,6 +1613,11 @@ func run() error {
 				InitialActive:    isInitial,
 				LastChannelID:    mostRecentlyVisitedChannel(wctx.LastVisitedByChannel),
 			})
+			// From here on every name the store learns reaches the UI.
+			// p.Send above has returned, so the Update loop has taken
+			// the Ready message; anything the notifier sends is
+			// processed after it.
+			wctx.UserNames.NotifyFrom(readySeq, uiNameNotifier(wctx.TeamID, p.Send))
 
 			// Fetch the workspace's custom emoji in the background. When
 			// done, a follow-up message makes rendering and the emoji
