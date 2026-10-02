@@ -129,9 +129,9 @@ func TestThreadSelectedTimestamp_NarrowReplyFallsBack(t *testing.T) {
 	// 24-col name: short header 33 fits contentWidth 36; long 45 does not.
 	m, rows := threadLongTS(t, "priya", "a-quite-long-displayname", 40, 30)
 	view := strings.Join(rows, "\n")
-		if strings.Contains(view, "Tue Sep 29") {
-			t.Fatalf("narrow thread shows long timestamp:\n%s", view)
-		}
+	if strings.Contains(view, "Tue Sep 29") {
+		t.Fatalf("narrow thread shows long timestamp:\n%s", view)
+	}
 	assertThreadHeightsMatch(t, m)
 }
 
@@ -142,9 +142,9 @@ func TestThreadSelectedTimestamp_NarrowParentFallsBack(t *testing.T) {
 	m.GoToTop()
 	m.MoveUp() // parent
 	rows := stripRows(m.View(30, 40))
-		if view := strings.Join(rows, "\n"); strings.Contains(view, "Tue Sep 29") {
-			t.Fatalf("narrow selected parent shows long timestamp:\n%s", view)
-		}
+	if view := strings.Join(rows, "\n"); strings.Contains(view, "Tue Sep 29") {
+		t.Fatalf("narrow selected parent shows long timestamp:\n%s", view)
+	}
 	assertPaneGeometry(t, rows, 40, 30)
 }
 
