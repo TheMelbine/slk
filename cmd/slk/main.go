@@ -960,7 +960,7 @@ func run() error {
 					return ui.MessageSendFailedMsg{ChannelID: chIDStr, Reason: err.Error()}
 				}
 				userName := "you"
-				if resolved, ok := userNames[client.UserID()]; ok {
+				if resolved, ok := userNames.Get(client.UserID()); ok {
 					userName = resolved
 				}
 				return ui.MessageSentMsg{
@@ -1194,7 +1194,7 @@ func run() error {
 					return ui.ThreadReplySendFailedMsg{ChannelID: chIDStr, ThreadTS: threadTSStr, Reason: err.Error()}
 				}
 				userName := "you"
-				if resolved, ok := userNames[client.UserID()]; ok {
+				if resolved, ok := userNames.Get(client.UserID()); ok {
 					userName = resolved
 				}
 				// Broadcast replies surface in the parent channel feed as
@@ -1372,14 +1372,16 @@ func run() error {
 
 		snap := workspacesStore.Snapshot()
 		return ui.WorkspaceSwitchedMsg{
-			TeamID:           wctx.TeamID,
-			TeamName:         wctx.TeamName,
-			Domain:           wctx.Client.TeamSubdomain(),
-			Theme:            snap.ResolveTheme(teamID),
-			SidebarWidth:     snap.ResolveWidth(teamID),
-			Channels:         channels,
-			FinderItems:      wctx.FinderItems,
-			UserNames:        wctx.UserNames,
+			TeamID:       wctx.TeamID,
+			TeamName:     wctx.TeamName,
+			Domain:       wctx.Client.TeamSubdomain(),
+			Theme:        snap.ResolveTheme(teamID),
+			SidebarWidth: snap.ResolveWidth(teamID),
+			Channels:     channels,
+			FinderItems:  wctx.FinderItems,
+			// A private copy: the UI must never share a map with the
+			// engine's goroutines (see userNameStore).
+			UserNames:        wctx.UserNames.Snapshot(),
 			UserStatuses:     statuses,
 			ExternalUsers:    external,
 			UserID:           wctx.UserID,
@@ -1578,14 +1580,16 @@ func run() error {
 			readyStatuses := cachedPeerStatuses(db, wctx.TeamID)
 			wctx.PeerStatus.SeedHuddles(readyStatuses)
 			p.Send(ui.WorkspaceReadyMsg{
-				TeamID:           wctx.TeamID,
-				TeamName:         wctx.TeamName,
-				Domain:           wctx.Client.TeamSubdomain(),
-				Theme:            cfgSnap.ResolveTheme(wctx.TeamID),
-				SidebarWidth:     cfgSnap.ResolveWidth(wctx.TeamID),
-				Channels:         wctx.Channels,
-				FinderItems:      wctx.FinderItems,
-				UserNames:        wctx.UserNames,
+				TeamID:       wctx.TeamID,
+				TeamName:     wctx.TeamName,
+				Domain:       wctx.Client.TeamSubdomain(),
+				Theme:        cfgSnap.ResolveTheme(wctx.TeamID),
+				SidebarWidth: cfgSnap.ResolveWidth(wctx.TeamID),
+				Channels:     wctx.Channels,
+				FinderItems:  wctx.FinderItems,
+				// A private copy: the UI must never share a map with
+				// the engine's goroutines (see userNameStore).
+				UserNames:        wctx.UserNames.Snapshot(),
 				UserStatuses:     readyStatuses,
 				ExternalUsers:    external,
 				UserID:           wctx.UserID,

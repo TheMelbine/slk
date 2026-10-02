@@ -79,7 +79,7 @@ func connectWorkspace(ctx context.Context, token slackclient.Token, db *cache.DB
 		TeamID:               client.TeamID(),
 		TeamName:             token.TeamName,
 		UserID:               client.UserID(),
-		UserNames:            make(map[string]string),
+		UserNames:            newUserNameStore(nil),
 		AvatarURLs:           &sync.Map{},
 		UserNamesByHandle:    make(map[string]string),
 		BotUserIDs:           make(map[string]bool),
@@ -97,7 +97,7 @@ func connectWorkspace(ctx context.Context, token slackclient.Token, db *cache.DB
 		if name == "" {
 			name = u.Name
 		}
-		wctx.UserNames[u.ID] = name
+		wctx.UserNames.Set(u.ID, name)
 		if u.Name != "" {
 			wctx.UserNamesByHandle[u.Name] = name
 		}
@@ -126,9 +126,9 @@ func connectWorkspace(ctx context.Context, token slackclient.Token, db *cache.DB
 	// Construct the per-workspace async user resolver. It writes
 	// resolved display names to the cache DB and emits
 	// UserResolvedMsg back into the bubbletea program; the UI's
-	// Update handler patches the in-memory userNames map on the
-	// UI goroutine via Model.PatchUserName (the single safe writer
-	// for that shared map). p may be nil in tests, in which case
+	// Update handler patches its own name map on the UI goroutine
+	// via Model.PatchUserName. The UI's map is a snapshot of
+	// wctx.UserNames, never the store itself. p may be nil in tests, in which case
 	// the resolver's send callback is a no-op.
 	wctx.UserResolver = newUserResolver(
 		wctx.TeamID,
@@ -360,7 +360,7 @@ func connectWorkspace(ctx context.Context, token slackclient.Token, db *cache.DB
 		upsertChannelInDB(db, ch, item.Type, client.TeamID())
 
 		if ch.IsIM {
-			if _, ok := wctx.UserNames[ch.User]; !ok {
+			if _, ok := wctx.UserNames.Get(ch.User); !ok {
 				wctx.UnresolvedDMs = append(wctx.UnresolvedDMs, UnresolvedDM{
 					ChannelID: ch.ID,
 					UserID:    ch.User,

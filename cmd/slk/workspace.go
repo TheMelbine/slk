@@ -33,7 +33,10 @@ type WorkspaceContext struct {
 	EdgeHealth *edge.Health
 	ConnMgr    *slackclient.ConnectionManager
 	RTMHandler *rtmEventHandler
-	UserNames  map[string]string
+	// UserNames is the engine-side user ID -> display name cache, safe
+	// from any goroutine. The UI never holds it: it gets a Snapshot.
+	// See userNameStore for why, and for the UserResolvedMsg rule.
+	UserNames *userNameStore
 	// AvatarURLs maps userID -> avatar image URL. Populated from the
 	// local users cache at connect time (synchronous, before any
 	// goroutines spin up), from conversations.view's users array via
@@ -138,7 +141,7 @@ type WorkspaceContext struct {
 	LastVisitedByChannel map[string]int64
 	// UserResolver dispatches background users.info lookups for
 	// unknown message authors. Set in connectWorkspace once the
-	// in-memory UserNames map and the *tea.Program are both available.
+	// in-memory UserNames store and the *tea.Program are both available.
 	// Hot-path message processors call resolveUserCached first and
 	// fall back to UserResolver.Request(userID) to enqueue an async
 	// fetch; the goroutine emits ui.UserResolvedMsg back into the

@@ -75,6 +75,13 @@ that no longer exists. Do not trust it.** Current structural documentation:
 - **Per-mode key handling is a table**, `modeHandlers` in
   `internal/ui/mode_handlers.go`. One `mode_*.go` file per mode.
 - **SQLite is a cache.** Slack remains authoritative.
+- **No map crosses a goroutine boundary.** The UI goroutine owns every map
+  the UI holds; anything handed to a `tea.Cmd`, or from `cmd/slk` into a
+  `WorkspaceReadyMsg`-style message, is a copy. A shared plain map is a
+  `fatal error: concurrent map read and map write`, which bubbletea cannot
+  recover from (it crashed slk on 2026-10-02 via the user-name map; see
+  `cmd/slk/usernames.go`). Engine-side state that several goroutines need is
+  locked (`userNameStore`) or published immutably (`WorkspaceContext.UserGroups`).
 
 ## Shared code — check here before writing a helper
 
@@ -104,6 +111,7 @@ scrollbars, date formatting, case folding, or ID formatting: it already exists.
 | Current DND state from a Slack API result | `slack.DNDStateFromStatus` |
 | Peer custom status, DND and huddle rendering | `ui/peerstatus` (`Status`, glyph/expiry/summary methods); `messages.AuthorStatusSuffix` for author headers |
 | Usergroup map helpers | `usergroups.Copy`, `usergroups.Equal`, `usergroups.Display` |
+| A workspace's user ID → display name, from any goroutine in `cmd/slk` | `wctx.UserNames` (`*userNameStore`: `Get`/`Set`; `lookupUserCached` / `resolveUserCached` add the SQLite fallback). Hand the UI `Snapshot()`, never the store; names learned later reach it only as `UserResolvedMsg` |
 | Copy text to the clipboard | `App.clipboardWrite` / `SetClipboardWriter`; `cmd/slk/newClipboardWriter` selects local macOS `pbcopy` or terminal OSC 52 |
 
 ### UI chrome

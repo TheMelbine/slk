@@ -566,7 +566,7 @@ func TestResolveDMNames(t *testing.T) {
 	}}
 	wctx := &WorkspaceContext{
 		TeamID:       "T1",
-		UserNames:    map[string]string{},
+		UserNames:    newUserNameStore(nil),
 		BotUserIDs:   map[string]bool{},
 		UserResolver: newUserResolver("T1", nil, db, nil, nil, batcher, nil),
 		UnresolvedDMs: []UnresolvedDM{
@@ -633,7 +633,7 @@ func TestResolveDMNames_FallbackPersistsStatusAndEmitsMessage(t *testing.T) {
 	wctx := &WorkspaceContext{
 		TeamID:       "T1",
 		Client:       client,
-		UserNames:    map[string]string{},
+		UserNames:    newUserNameStore(nil),
 		BotUserIDs:   map[string]bool{},
 		UserResolver: newUserResolver("T1", nil, db, nil, nil, batcher, nil),
 		UnresolvedDMs: []UnresolvedDM{
@@ -671,6 +671,24 @@ func TestResolveDMNames_FallbackPersistsStatusAndEmitsMessage(t *testing.T) {
 	}
 	if status.TeamID != "T1" || status.Emoji != ":palm_tree:" || status.Text != "Vacation" || status.Huddle != "in_a_huddle" {
 		t.Errorf("emitted status = %+v", status)
+	}
+
+	// The UI holds a snapshot of the name store, not the store, so a
+	// name the fallback fetches only reaches rendered history through
+	// UserResolvedMsg. Before 2026-10-02 the UI shared the map and saw
+	// the (racy) write instead.
+	var resolved *ui.UserResolvedMsg
+	for _, m := range sent {
+		if r, ok := m.(ui.UserResolvedMsg); ok && r.UserID == "U_BOB" {
+			c := r
+			resolved = &c
+		}
+	}
+	if resolved == nil || resolved.TeamID != "T1" || resolved.DisplayName != "Bob" {
+		t.Errorf("UserResolvedMsg for U_BOB = %+v; want TeamID T1, DisplayName Bob", resolved)
+	}
+	if name, ok := wctx.UserNames.Get("U_BOB"); !ok || name != "Bob" {
+		t.Errorf("name store U_BOB = (%q, %v); want (\"Bob\", true)", name, ok)
 	}
 }
 

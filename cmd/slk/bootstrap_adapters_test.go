@@ -672,7 +672,7 @@ func TestHydrateFirstSight_LeavesExistingRowsAlone(t *testing.T) {
 
 func TestApplyBootUsers_FillsTheMapsTheSidebarReads(t *testing.T) {
 	wctx := &WorkspaceContext{
-		UserNames:         map[string]string{},
+		UserNames:         newUserNameStore(nil),
 		UserNamesByHandle: map[string]string{},
 		BotUserIDs:        map[string]bool{},
 		AvatarURLs:        &sync.Map{},
@@ -688,8 +688,8 @@ func TestApplyBootUsers_FillsTheMapsTheSidebarReads(t *testing.T) {
 	}})
 
 	want := map[string]string{"U1": "Pat", "U2": "Sam Real", "U3": "handle-only", "U4": "appy"}
-	if !reflect.DeepEqual(wctx.UserNames, want) {
-		t.Errorf("UserNames = %+v; want %+v", wctx.UserNames, want)
+	if got := wctx.UserNames.Snapshot(); !reflect.DeepEqual(got, want) {
+		t.Errorf("UserNames = %+v; want %+v", got, want)
 	}
 	if got := wctx.UserNamesByHandle["pat"]; got != "Pat" {
 		t.Errorf("UserNamesByHandle[pat] = %q; want Pat", got)
