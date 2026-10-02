@@ -75,13 +75,16 @@ that no longer exists. Do not trust it.** Current structural documentation:
 - **Per-mode key handling is a table**, `modeHandlers` in
   `internal/ui/mode_handlers.go`. One `mode_*.go` file per mode.
 - **SQLite is a cache.** Slack remains authoritative.
-- **No map crosses a goroutine boundary.** The UI goroutine owns every map
-  the UI holds; anything handed to a `tea.Cmd`, or from `cmd/slk` into a
-  `WorkspaceReadyMsg`-style message, is a copy. A shared plain map is a
-  `fatal error: concurrent map read and map write`, which bubbletea cannot
-  recover from (it crashed slk on 2026-10-02 via the user-name map; see
-  `cmd/slk/usernames.go`). Engine-side state that several goroutines need is
-  locked (`userNameStore`) or published immutably (`WorkspaceContext.UserGroups`).
+- **A map shared across goroutines is never written.** Every map the UI holds
+  is either built for it (a copy, like `userNameStore.Snapshot()` or the
+  per-message `ExternalUsers` set) or published once and never mutated
+  again (`WorkspaceContext.CustomEmoji` / `UserGroups`, swapped whole via
+  `atomic.Pointer`). The same goes for maps captured by a `tea.Cmd`
+  (`saveThreadToFile` clones them). A plain map written while another
+  goroutine reads it is a `fatal error: concurrent map read and map write`,
+  which bubbletea cannot recover from; it crashed slk on 2026-10-02 via the
+  user-name map (see `cmd/slk/usernames.go`). Engine state several goroutines
+  write is locked (`userNameStore`) instead.
 
 ## Shared code — check here before writing a helper
 
@@ -111,7 +114,7 @@ scrollbars, date formatting, case folding, or ID formatting: it already exists.
 | Current DND state from a Slack API result | `slack.DNDStateFromStatus` |
 | Peer custom status, DND and huddle rendering | `ui/peerstatus` (`Status`, glyph/expiry/summary methods); `messages.AuthorStatusSuffix` for author headers |
 | Usergroup map helpers | `usergroups.Copy`, `usergroups.Equal`, `usergroups.Display` |
-| A workspace's user ID → display name, from any goroutine in `cmd/slk` | `wctx.UserNames` (`*userNameStore`: `Get`/`Set`; `lookupUserCached` / `resolveUserCached` add the SQLite fallback). Hand the UI `Snapshot()`, never the store; names learned later reach it only as `UserResolvedMsg` |
+| A workspace's user ID → display name, from any goroutine in `cmd/slk` | `wctx.UserNames` (`*userNameStore`: `Get`/`Set`, `MentionedNames(text)` for one message; `lookupUserCached` / `resolveUserCached` add the SQLite fallback). Just `Set`: once the UI has its `Snapshot()`, `NotifyFrom` makes every new or changed name reach it as `UserResolvedMsg`. Never hand the UI the store |
 | Copy text to the clipboard | `App.clipboardWrite` / `SetClipboardWriter`; `cmd/slk/newClipboardWriter` selects local macOS `pbcopy` or terminal OSC 52 |
 
 ### UI chrome

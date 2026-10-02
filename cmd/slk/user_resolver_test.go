@@ -756,3 +756,45 @@ func TestUserResolver_FirstSightEdgeDeliversPeerStatus(t *testing.T) {
 	}
 	t.Fatal("first-sight edge resolution emitted no peer status")
 }
+
+// TestUserResolver_RecordsNamesInStore: names the resolver fetches
+// must land in the workspace's name store, not only in SQLite. The UI
+// drops a UserResolvedMsg for a workspace it is not showing, so for an
+// inactive workspace the store is the only place the name survives
+// until the user switches to it (the switch snapshot carries it).
+// Before this, a name resolved while inactive was in SQLite only;
+// Request's cache-skip gate then never re-resolved it, and the
+// switched-to UI showed the raw ID.
+func TestUserResolver_RecordsNamesInStore(t *testing.T) {
+	t.Run("edge batch", func(t *testing.T) {
+		db := newTestDB(t)
+		r := newUserResolver("T1", nil, db, nil, nil, &fakeBatcher{res: []edge.User{
+			edgeUserRecord("U1", "alice", "Alice", "", "T1", 7, false),
+		}}, nil)
+		store := newUserNameStore(nil)
+		r.names = store
+		if got := r.ResolveNow([]string{"U1"}); len(got) != 1 {
+			t.Fatalf("ResolveNow returned %d users; want 1", len(got))
+		}
+		if name, ok := store.Get("U1"); !ok || name != "Alice" {
+			t.Errorf("store U1 = (%q, %v); want (\"Alice\", true)", name, ok)
+		}
+	})
+	t.Run("per-user users.info", func(t *testing.T) {
+		srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true,"user":{"id":"U2","name":"bob","team_id":"T1","profile":{"display_name":"Bob"}}}`))
+		}))
+		defer srv.Close()
+		db := newTestDB(t)
+		watch := newResolvedWatch(1, nil)
+		r := newUserResolver("T1", newTestClient(t, srv), db, nil, watch.send, nil, nil)
+		store := newUserNameStore(nil)
+		r.names = store
+		r.Request("U2")
+		<-watch.done
+		if name, ok := store.Get("U2"); !ok || name != "Bob" {
+			t.Errorf("store U2 = (%q, %v); want (\"Bob\", true)", name, ok)
+		}
+	})
+}

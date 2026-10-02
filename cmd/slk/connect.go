@@ -142,6 +142,7 @@ func connectWorkspace(ctx context.Context, token slackclient.Token, db *cache.DB
 		},
 		wctx.Edge, wctx.EdgeHealth.Degraded,
 	)
+	wctx.UserResolver.names = wctx.UserNames
 
 	// Refetches other users' custom status and DND on the socket's
 	// ID-only user_invalidated / dnd_invalidated events. known reads the

@@ -224,9 +224,9 @@ func (h *rtmEventHandler) OnMessage(channelID, userID, ts, text, threadTS, subty
 			if h.wsCtx != nil {
 				groupNames = h.wsCtx.UserGroups()
 			}
-			// A snapshot, not the store: the stripper wants a plain map,
-			// and this branch only runs for a notification.
-			body := senderName + ": " + notify.StripSlackMarkupWithUserGroups(text, h.userNames.Snapshot(), groupNames)
+			// Just the mentioned names, not a copy of the whole store:
+			// the stripper wants a plain map.
+			body := senderName + ": " + notify.StripSlackMarkupWithUserGroups(text, h.userNames.MentionedNames(text), groupNames)
 			go func() {
 				if err := h.notifier.Notify(title, body); err != nil {
 					debuglog.Notify("notification failed: %v", err)
