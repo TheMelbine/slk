@@ -81,8 +81,12 @@ func main() {
 		case "--help", "-h", "help":
 			printHelp()
 			return
-		case "--add-workspace":
-			if err := addWorkspace(len(os.Args) > 2 && os.Args[2] == "--browser"); err != nil {
+		case "--add-workspace", "--browser":
+			browser, err := addWorkspaceArgs(os.Args[1:])
+			if err == nil {
+				err = addWorkspace(browser)
+			}
+			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
 			}

@@ -2,12 +2,19 @@ package main
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/gammons/slk/internal/config"
+	slackclient "github.com/gammons/slk/internal/slack"
 )
 
 // Shapes of "Copy as cURL" as Chrome and Firefox produce them, trimmed to what
-// matters. The values are fake.
+// matters. The values are fake. The cmd and PowerShell ones follow Chrome's
+// escaping rules (^" around strings, ^% and %^ around a percent; the cookies
+// in a WebRequestSession).
 const (
 	chromeCurl = `curl 'https://acme.slack.com/api/conversations.history?_x_id=abc&slack_route=T0123' \
   -H 'accept: */*' \
@@ -17,6 +24,20 @@ const (
 `
 	firefoxCurl = `curl 'https://acme.slack.com/api/client.counts' -X POST -H 'Content-Type: application/x-www-form-urlencoded' -H 'Cookie: d-s=17; d=xoxd-ZZZ%2F%3D; b=x' --data-raw 'token=xoxc-9999-8888-aa&_x_reason=x'
 `
+	cmdCurl = `curl ^"https://acme.slack.com/api/conversations.history?_x_id=abc^&slack_route=T0123^" ^
+  -H ^"accept: */*^" ^
+  -b ^"b=abc123; d=xoxd-AbC^%^2Fdef^%^2BGhi^%^3D^%^3D; d-s=1700000000^" ^
+  --data-raw ^"token=xoxc-1111-2222-3333-abcdef^&_x_reason=x^"
+`
+	powershellCurl = "$session = New-Object Microsoft.PowerShell.Commands.WebRequestSession\n" +
+		"$session.UserAgent = \"Mozilla/5.0\"\n" +
+		"$session.Cookies.Add((New-Object System.Net.Cookie(\"b\", \"abc123\", \"/\", \".slack.com\")))\n" +
+		"$session.Cookies.Add((New-Object System.Net.Cookie(\"d\", \"xoxd-AbC%2Fdef\", \"/\", \".slack.com\")))\n" +
+		"$session.Cookies.Add((New-Object System.Net.Cookie(\"d-s\", \"1700000000\", \"/\", \".slack.com\")))\n" +
+		"Invoke-WebRequest -UseBasicParsing -Uri \"https://acme.slack.com/api/client.counts\" `\n" +
+		"-Method \"POST\" `\n" +
+		"-WebSession $session `\n" +
+		"-Body \"token=xoxc-9999-8888-aa&_x_reason=x\"\n"
 )
 
 func TestParseBrowserSession(t *testing.T) {
@@ -25,6 +46,11 @@ func TestParseBrowserSession(t *testing.T) {
 	}{
 		{"chrome", chromeCurl, "xoxc-1111-2222-3333-abcdef", "xoxd-AbC%2Fdef%2BGhi%3D%3D"},
 		{"firefox, d-s before d", firefoxCurl, "xoxc-9999-8888-aa", "xoxd-ZZZ%2F%3D"},
+		{"chrome cmd", cmdCurl, "xoxc-1111-2222-3333-abcdef", "xoxd-AbC%2Fdef%2BGhi%3D%3D"},
+		{"chrome powershell", powershellCurl, "xoxc-9999-8888-aa", "xoxd-AbC%2Fdef"},
+		{"a cookie named xd before d", `-b 'xd=xoxd-WRONG; d=xoxd-RIGHT' token=xoxc-1`, "xoxc-1", "xoxd-RIGHT"},
+		{"a cookie named x-d before d", `-b 'x-d=xoxd-WRONG; d=xoxd-RIGHT' token=xoxc-1`, "xoxc-1", "xoxd-RIGHT"},
+		{"bare cookie, decoded", "xoxd-AbC/def+Ghi==\n", "", "xoxd-AbC%2Fdef%2BGhi%3D%3D"},
 		{"cookie first in the header", `-H 'cookie: d=xoxd-A1; b=2' token=xoxc-1-2`, "xoxc-1-2", "xoxd-A1"},
 		{"bare token", "xoxc-1-2-3\n", "xoxc-1-2-3", ""},
 		{"bare cookie", "  xoxd-Q%2F\n", "", "xoxd-Q%2F"},
@@ -53,6 +79,11 @@ func TestPasteComplete(t *testing.T) {
 		{"curl 'x' \\\n", false},
 		{"curl 'x' \\  \n", false},
 		{"curl 'x' \\\n  -H 'a: b'\n", true},
+		{"curl ^\"x^\" ^\n", false},
+		{"curl ^\"x^\" ^\n  -H ^\"a: b^\"\n", true},
+		{"$session = New-Object X\n", false},
+		{"$session = New-Object X\nInvoke-WebRequest -Uri \"x\" `\n", false},
+		{"$session = New-Object X\nInvoke-WebRequest -Uri \"x\" `\n-Body \"y\"\n", true},
 	}
 	for _, tc := range tests {
 		if got := pasteComplete(tc.s); got != tc.want {
@@ -98,5 +129,172 @@ func TestReadPasteControlKeys(t *testing.T) {
 	got, err = readPaste(strings.NewReader("xoxc-1"))
 	if err != nil || got != "xoxc-1" {
 		t.Errorf("EOF: readPaste = (%q, %v), want what was read so far", got, err)
+	}
+}
+
+// Every shape must be read whole: a paste readPaste stops on early leaves its
+// tail, token and cookie included, for the shell to read.
+func TestReadPasteReadsEveryShapeWhole(t *testing.T) {
+	for name, paste := range map[string]string{
+		"chrome bash": chromeCurl, "firefox": firefoxCurl, "chrome cmd": cmdCurl, "chrome powershell": powershellCurl,
+	} {
+		in := strings.ReplaceAll(paste, "\n", "\r") + "left over"
+		got, err := readPaste(strings.NewReader(in))
+		if err != nil || got != paste {
+			t.Errorf("%s: readPaste = (%q, %v), want the whole paste", name, got, err)
+		}
+	}
+}
+
+// fakeLogin is a browserLogin whose reads come from a list, and which records
+// what reached Slack and the token store.
+type fakeLogin struct {
+	pastes  []string
+	reads   int
+	authed  bool
+	saved   *slackclient.Token
+	authErr error
+}
+
+func (f *fakeLogin) login() browserLogin {
+	return browserLogin{
+		read: func(string) (string, error) {
+			if f.reads >= len(f.pastes) {
+				return "", errors.New("unexpected read")
+			}
+			f.reads++
+			return f.pastes[f.reads-1], nil
+		},
+		auth: func(token, cookie string) (slackclient.Token, error) {
+			f.authed = true
+			if f.authErr != nil {
+				return slackclient.Token{}, f.authErr
+			}
+			return slackclient.Token{AccessToken: token, Cookie: cookie, TeamID: "T1", TeamName: "Acme", Domain: "acme"}, nil
+		},
+		save: func(tok slackclient.Token) error {
+			f.saved = &tok
+			return nil
+		},
+	}
+}
+
+func TestBrowserLoginRun(t *testing.T) {
+	st := newOnboardingStyles()
+
+	t.Run("no token: Slack is never called", func(t *testing.T) {
+		f := &fakeLogin{pastes: []string{"curl 'https://app.slack.com/client' -b 'd=xoxd-A'"}}
+		if err := f.login().run(st); !errors.Is(err, errNoToken) {
+			t.Errorf("err = %v, want errNoToken", err)
+		}
+		if f.authed || f.saved != nil {
+			t.Error("auth or save ran without a token")
+		}
+	})
+
+	t.Run("bare token: the cookie is asked for next", func(t *testing.T) {
+		f := &fakeLogin{pastes: []string{"xoxc-1-2\n", "xoxd-Q%2F\n"}}
+		if err := f.login().run(st); err != nil {
+			t.Fatalf("run: %v", err)
+		}
+		if f.reads != 2 || f.saved == nil || f.saved.AccessToken != "xoxc-1-2" || f.saved.Cookie != "xoxd-Q%2F" {
+			t.Errorf("reads=%d saved=%+v, want both values saved after two reads", f.reads, f.saved)
+		}
+	})
+
+	t.Run("no cookie on the second read", func(t *testing.T) {
+		f := &fakeLogin{pastes: []string{"xoxc-1-2\n", "not a cookie\n"}}
+		if err := f.login().run(st); !errors.Is(err, errNoCookie) {
+			t.Errorf("err = %v, want errNoCookie", err)
+		}
+		if f.authed || f.saved != nil {
+			t.Error("auth or save ran without a cookie")
+		}
+	})
+
+	t.Run("a full cURL saves in one read", func(t *testing.T) {
+		f := &fakeLogin{pastes: []string{chromeCurl}}
+		if err := f.login().run(st); err != nil {
+			t.Fatalf("run: %v", err)
+		}
+		if f.reads != 1 || f.saved == nil || f.saved.TeamID != "T1" {
+			t.Errorf("reads=%d saved=%+v, want one read and the team saved", f.reads, f.saved)
+		}
+	})
+
+	t.Run("Slack refuses: nothing saved", func(t *testing.T) {
+		authErr := errors.New("invalid_auth")
+		f := &fakeLogin{pastes: []string{chromeCurl}, authErr: authErr}
+		if err := f.login().run(st); !errors.Is(err, authErr) {
+			t.Errorf("err = %v, want it to wrap the auth error", err)
+		}
+		if f.saved != nil {
+			t.Error("saved a token Slack refused")
+		}
+	})
+}
+
+// Without a terminal there is nobody to ask: the desktop error comes back
+// as is, not wrapped.
+func TestOfferBrowserFallbackNotInteractive(t *testing.T) {
+	desktopErr := errors.New("slack desktop app config directory not found")
+	if err := offerBrowserFallback(false, nil, newOnboardingStyles(), desktopErr); err != desktopErr {
+		t.Errorf("err = %v, want the desktop error itself", err)
+	}
+}
+
+func TestAddWorkspaceArgs(t *testing.T) {
+	tests := []struct {
+		args    []string
+		browser bool
+		wantErr bool
+	}{
+		{[]string{"--add-workspace"}, false, false},
+		{[]string{"--add-workspace", "--browser"}, true, false},
+		{[]string{"--browser", "--add-workspace"}, true, false},
+		{[]string{"--browser"}, false, true},
+		{[]string{"--add-workspace", "--brower"}, false, true},
+	}
+	for _, tc := range tests {
+		browser, err := addWorkspaceArgs(tc.args)
+		if browser != tc.browser || (err != nil) != tc.wantErr {
+			t.Errorf("addWorkspaceArgs(%q) = (%v, %v), want (%v, error=%v)", tc.args, browser, err, tc.browser, tc.wantErr)
+		}
+	}
+}
+
+// Running the flow again when the browser session expires must refresh the
+// token without writing a second [workspaces] block for the same team, which
+// config.Load rejects.
+func TestSaveWorkspaceTwiceKeepsConfigLoadable(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	store := slackclient.NewTokenStore(filepath.Join(dir, "tokens"))
+	st := newOnboardingStyles()
+
+	// A real-looking team ID: config.Load rejects one that is not.
+	first := slackclient.Token{AccessToken: "xoxc-old", Cookie: "xoxd-old", TeamID: "T0123ABCD", TeamName: "Acme", Domain: "acme"}
+	second := first
+	second.AccessToken, second.Cookie = "xoxc-new", "xoxd-new"
+	for _, tok := range []slackclient.Token{first, second} {
+		if err := saveWorkspace(store, tok, st); err != nil {
+			t.Fatalf("saveWorkspace: %v", err)
+		}
+	}
+
+	configPath := filepath.Join(dir, "slk", "config.toml")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("reading config: %v", err)
+	}
+	if n := strings.Count(string(data), "[workspaces."); n != 1 {
+		t.Errorf("%d workspace blocks, want 1:\n%s", n, data)
+	}
+	if _, err := config.Load(configPath); err != nil {
+		t.Errorf("config.Load: %v", err)
+	}
+	got, err := store.Load("T0123ABCD")
+	if err != nil || got.AccessToken != "xoxc-new" {
+		t.Errorf("token = (%+v, %v), want the refreshed one", got, err)
 	}
 }

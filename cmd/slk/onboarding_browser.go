@@ -5,9 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
+	"os/signal"
 	"regexp"
 	"strings"
+	"syscall"
+	"time"
 
 	"charm.land/huh/v2"
 	"golang.org/x/term"
@@ -20,7 +24,8 @@ import (
 // same two values the desktop flow reads: the xoxc token and the d cookie.
 // The d cookie is HttpOnly, so no DevTools console snippet can read it, but a
 // "Copy as cURL" of any request to a Slack /api/ endpoint carries both. The
-// user pastes that; a bare xoxc token followed by the d cookie also works.
+// user pastes that (the bash, cmd or PowerShell form); a bare xoxc token
+// followed by the d cookie also works.
 //
 // Nothing re-mints such a token: startup keeps the cached one when it cannot
 // read a desktop cookie (see remintTokens), so it lasts as long as the
@@ -32,8 +37,12 @@ var (
 	errNoCookie       = errors.New("no d cookie (xoxd-) found: copy the request from a browser signed in to app.slack.com")
 
 	xoxcPattern = regexp.MustCompile(`xoxc-[A-Za-z0-9-]+`)
-	// The d cookie, not d-s or any other cookie ending in d.
+	// The d cookie as "d=<value>" (bash and cmd forms, a Cookie header),
+	// not d-s, xd or any other cookie whose name ends in d.
 	dCookiePattern = regexp.MustCompile(`(?:^|[^A-Za-z0-9_-])d=(xoxd-[^;\s"'\\]+)`)
+	// The d cookie in the PowerShell form:
+	// New-Object System.Net.Cookie("d", "xoxd-...", "/", ".slack.com").
+	psCookiePattern = regexp.MustCompile(`Cookie\(\s*"d"\s*,\s*"(xoxd-[^"]+)"`)
 	// A value pasted on its own, without the "d=" prefix.
 	bareCookiePattern = regexp.MustCompile(`^xoxd-[^;\s"'\\]+$`)
 )
@@ -42,7 +51,7 @@ const browserSessionSteps = `No Slack desktop app needed: sign in from your brow
 
   1. Open https://app.slack.com in your browser and sign in.
   2. DevTools > Network, filter on api/, click a channel, then right click
-     one of the requests > Copy > Copy as cURL (bash).
+     one of the requests > Copy > Copy as cURL.
   3. Paste it below (nothing is shown while you paste).
 
 A bare xoxc- token works too; slk then asks for the d cookie
@@ -51,24 +60,50 @@ A bare xoxc- token works too; slk then asks for the d cookie
 // parseBrowserSession pulls the xoxc token and the d cookie out of pasted
 // text. Either may be empty; the caller decides what to ask for next.
 func parseBrowserSession(paste string) (token, cookie string) {
+	// The cmd form escapes with carets (^", ^%, %^2F): none belongs to a
+	// token or a cookie, so they all go.
+	if strings.Contains(paste, `^"`) {
+		paste = strings.ReplaceAll(paste, "^", "")
+	}
 	token = xoxcPattern.FindString(paste)
 	if m := dCookiePattern.FindStringSubmatch(paste); m != nil {
+		cookie = m[1]
+	} else if m := psCookiePattern.FindStringSubmatch(paste); m != nil {
 		cookie = m[1]
 	} else if trimmed := strings.TrimSpace(paste); bareCookiePattern.MatchString(trimmed) {
 		cookie = trimmed
 	}
-	return token, cookie
+	return token, encodeCookie(cookie)
 }
 
-// pasteComplete reports whether the text read so far ends a pasted command:
-// its last line is not empty and does not end with a shell continuation.
+// encodeCookie returns the d cookie in its URL-encoded form, the one the
+// desktop flow stores and the one Slack sends. DevTools' Application tab can
+// show it decoded (xoxd-AbC/def+Ghi==); an already encoded value is kept.
+func encodeCookie(cookie string) string {
+	if cookie == "" || strings.Contains(cookie, "%") || !strings.ContainsAny(cookie, "/+=") {
+		return cookie
+	}
+	return url.QueryEscape(cookie)
+}
+
+// pasteComplete reports whether the text read so far ends a pasted command.
+// A line ending with a continuation (\ for bash, ^ for cmd, ` for
+// PowerShell) asks for more. The PowerShell form opens with "$session = ..."
+// lines that end with no continuation at all, so it is only complete once its
+// Invoke-WebRequest command is.
 func pasteComplete(s string) bool {
 	s = strings.TrimRight(s, "\n")
 	if strings.TrimSpace(s) == "" {
 		return false
 	}
 	last := strings.TrimRight(s[strings.LastIndexByte(s, '\n')+1:], " \t")
-	return !strings.HasSuffix(last, `\`)
+	if strings.HasSuffix(last, `\`) || strings.HasSuffix(last, "^") || strings.HasSuffix(last, "`") {
+		return false
+	}
+	if strings.HasPrefix(strings.TrimSpace(s), "$session") {
+		return strings.Contains(s, "Invoke-WebRequest")
+	}
+	return true
 }
 
 // readPaste reads a paste byte by byte until it is complete (see
@@ -103,31 +138,116 @@ func readPaste(r io.Reader) (string, error) {
 	}
 }
 
+// pasteSettle is how long readSecret lets the rest of a paste arrive before
+// discarding it. A paste reaches the terminal in chunks; one that readPaste
+// stopped early on must not be left for the shell to read once slk exits.
+const pasteSettle = 150 * time.Millisecond
+
 // readSecret prints prompt and reads a paste without echoing it. From a pipe
 // it reads everything.
 func readSecret(in *os.File, prompt string) (string, error) {
 	fmt.Print(prompt)
+	defer fmt.Println()
 	fd := int(in.Fd())
 	if !term.IsTerminal(fd) {
 		b, err := io.ReadAll(in)
-		fmt.Println()
 		return string(b), err
 	}
 	old, err := term.MakeRaw(fd)
 	if err != nil {
 		return "", err
 	}
+	defer func() { _ = term.Restore(fd, old) }()
+
+	// A SIGTERM or SIGHUP while waiting for the paste skips the deferred
+	// Restore: put the terminal back before going.
+	sig := make(chan os.Signal, 1)
+	done := make(chan struct{})
+	signal.Notify(sig, syscall.SIGTERM, syscall.SIGHUP)
+	defer func() {
+		signal.Stop(sig)
+		close(done)
+	}()
+	go func() {
+		select {
+		case <-sig:
+			_ = term.Restore(fd, old)
+			os.Exit(1)
+		case <-done:
+		}
+	}()
+
 	s, err := readPaste(in)
-	_ = term.Restore(fd, old)
-	fmt.Println()
+	// Whatever is still queued (the tail of a paste readPaste stopped on,
+	// or keys typed meanwhile) holds secrets: drop it rather than hand it
+	// to the shell.
+	time.Sleep(pasteSettle)
+	_ = flushInput(fd)
 	return s, err
+}
+
+// browserLogin is the browser-session flow with its I/O injected, so each
+// step can be tested without a terminal or Slack.
+type browserLogin struct {
+	// read prompts for and returns a paste.
+	read func(prompt string) (string, error)
+	// auth checks the pair with Slack and returns the token to save.
+	auth func(token, cookie string) (slackclient.Token, error)
+	// save persists it.
+	save func(slackclient.Token) error
+}
+
+func (b browserLogin) run(st onboardingStyles) error {
+	paste, err := b.read("cURL command or xoxc token: ")
+	if err != nil {
+		return err
+	}
+	token, cookie := parseBrowserSession(paste)
+	if token == "" {
+		fmt.Println(st.errorText.Render("  " + errNoToken.Error()))
+		return errNoToken
+	}
+	if cookie == "" {
+		paste, err = b.read("d cookie: ")
+		if err != nil {
+			return err
+		}
+		if _, cookie = parseBrowserSession(paste); cookie == "" {
+			fmt.Println(st.errorText.Render("  " + errNoCookie.Error()))
+			return errNoCookie
+		}
+	}
+
+	fmt.Println(st.step.Render("Connecting..."))
+	tok, err := b.auth(token, cookie)
+	if err != nil {
+		fmt.Println(st.errorText.Render(fmt.Sprintf("  Authentication failed: %v", err)))
+		return fmt.Errorf("authentication failed: %w", err)
+	}
+	return b.save(tok)
+}
+
+// authBrowserSession checks the pair with auth.test, which also yields the
+// team ID, name and subdomain the token file needs.
+func authBrowserSession(token, cookie string) (slackclient.Token, error) {
+	client := slackclient.NewClient(token, cookie)
+	if err := client.Connect(context.Background()); err != nil {
+		return slackclient.Token{}, err
+	}
+	return slackclient.Token{
+		AccessToken: token,
+		Cookie:      cookie,
+		Domain:      client.TeamSubdomain(),
+		TeamID:      client.TeamID(),
+		TeamName:    client.TeamName(),
+	}, nil
 }
 
 // offerBrowserFallback is called when the desktop session cannot be read. On
 // a terminal it offers the browser-session flow; otherwise it returns the
 // desktop error unchanged.
-func offerBrowserFallback(tokenStore *slackclient.TokenStore, st onboardingStyles, desktopErr error) error {
-	if !term.IsTerminal(int(os.Stdin.Fd())) {
+func offerBrowserFallback(interactive bool, tokenStore *slackclient.TokenStore, st onboardingStyles, desktopErr error) error {
+	if !interactive {
 		return desktopErr
 	}
 	useBrowser := true
@@ -142,47 +262,19 @@ func offerBrowserFallback(tokenStore *slackclient.TokenStore, st onboardingStyle
 	return addWorkspaceFromBrowser(tokenStore, st)
 }
 
-// addWorkspaceFromBrowser runs the browser-session flow: read the paste,
-// check the pair with auth.test, save the token like the desktop flow does.
+// addWorkspaceFromBrowser runs the browser-session flow against the terminal
+// and Slack.
 func addWorkspaceFromBrowser(tokenStore *slackclient.TokenStore, st onboardingStyles) error {
 	fmt.Println()
 	fmt.Println(browserSessionSteps)
 	fmt.Println()
 
-	paste, err := readSecret(os.Stdin, "cURL command or xoxc token: ")
-	if err != nil {
-		return err
+	login := browserLogin{
+		read: func(prompt string) (string, error) { return readSecret(os.Stdin, prompt) },
+		auth: authBrowserSession,
+		save: func(tok slackclient.Token) error { return saveWorkspace(tokenStore, tok, st) },
 	}
-	token, cookie := parseBrowserSession(paste)
-	if token == "" {
-		fmt.Println(st.errorText.Render("  " + errNoToken.Error()))
-		return errNoToken
-	}
-	if cookie == "" {
-		paste, err = readSecret(os.Stdin, "d cookie: ")
-		if err != nil {
-			return err
-		}
-		if _, cookie = parseBrowserSession(paste); cookie == "" {
-			fmt.Println(st.errorText.Render("  " + errNoCookie.Error()))
-			return errNoCookie
-		}
-	}
-
-	fmt.Println(st.step.Render("Connecting..."))
-	client := slackclient.NewClient(token, cookie)
-	if err := client.Connect(context.Background()); err != nil {
-		fmt.Println(st.errorText.Render(fmt.Sprintf("  Authentication failed: %v", err)))
-		return fmt.Errorf("authentication failed: %w", err)
-	}
-	tok := slackclient.Token{
-		AccessToken: token,
-		Cookie:      cookie,
-		Domain:      client.TeamSubdomain(),
-		TeamID:      client.TeamID(),
-		TeamName:    client.TeamName(),
-	}
-	if err := saveWorkspace(tokenStore, tok, st); err != nil {
+	if err := login.run(st); err != nil {
 		return err
 	}
 
@@ -192,4 +284,25 @@ func addWorkspaceFromBrowser(tokenStore *slackclient.TokenStore, st onboardingSt
 	fmt.Println(st.dim.Render("  Run ") + st.step.Render("slk") + st.dim.Render(" to start."))
 	fmt.Println()
 	return nil
+}
+
+// addWorkspaceArgs reads the arguments of an --add-workspace run, in any
+// order: whether to go straight to the browser-session flow. --browser alone,
+// or anything else alongside, is an error rather than silently ignored.
+func addWorkspaceArgs(args []string) (browser bool, err error) {
+	add := false
+	for _, a := range args {
+		switch a {
+		case "--add-workspace":
+			add = true
+		case "--browser":
+			browser = true
+		default:
+			return false, fmt.Errorf("unexpected argument %q (usage: slk --add-workspace [--browser])", a)
+		}
+	}
+	if !add {
+		return false, errors.New("--browser goes with --add-workspace: slk --add-workspace --browser")
+	}
+	return browser, nil
 }

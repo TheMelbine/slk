@@ -57,7 +57,8 @@ slk --add-workspace --browser
 
 1. Open https://app.slack.com in your browser and sign in.
 2. DevTools > Network, filter on `api/`, click a channel, then right click one
-   of the requests > Copy > Copy as cURL (bash).
+   of the requests > Copy > Copy as cURL (the bash, cmd and PowerShell forms
+   all work).
 3. Paste it at the prompt. Nothing is echoed.
 
 The copied request carries both values slk needs: the `xoxc-` token and the
@@ -68,7 +69,8 @@ other workspace.
 
 Such a token is not re-minted on launch, since there is no desktop cookie to
 mint from: it lasts as long as the browser session. When Slack signs it out,
-run `slk --add-workspace --browser` again.
+run `slk --add-workspace --browser` again: it refreshes the token and leaves
+your `config.toml` as it is.
 
 ## Removing a workspace
 

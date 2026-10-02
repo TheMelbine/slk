@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"charm.land/huh/v2"
@@ -11,6 +12,7 @@ import (
 	"github.com/gammons/slk/internal/config"
 	slackclient "github.com/gammons/slk/internal/slack"
 	"github.com/gammons/slk/internal/slackdesktop"
+	"golang.org/x/term"
 )
 
 // onboardingStyles are the lipgloss styles shared by the desktop and the
@@ -54,12 +56,12 @@ func addWorkspace(forceBrowser bool) error {
 	cookie, err := slackdesktop.Cookie()
 	if err != nil {
 		fmt.Println(errorStyle.Render("  " + desktopErrorMessage(err)))
-		return offerBrowserFallback(tokenStore, st, err)
+		return offerBrowserFallback(term.IsTerminal(int(os.Stdin.Fd())), tokenStore, st, err)
 	}
 	workspaces, err := slackdesktop.Workspaces()
 	if err != nil {
 		fmt.Println(errorStyle.Render("  " + desktopErrorMessage(err)))
-		return offerBrowserFallback(tokenStore, st, err)
+		return offerBrowserFallback(term.IsTerminal(int(os.Stdin.Fd())), tokenStore, st, err)
 	}
 
 	// Multi-select (all pre-selected).
@@ -132,12 +134,21 @@ func addWorkspace(forceBrowser bool) error {
 }
 
 // saveWorkspace persists a validated token and appends its
-// [workspaces.<slug>] config block (best-effort).
+// [workspaces.<slug>] config block (best-effort). Re-adding a workspace
+// already in config.toml (the browser flow's documented recovery when its
+// session expires) only refreshes the token: a second block for the same
+// team_id would make config.Load reject the file.
 func saveWorkspace(tokenStore *slackclient.TokenStore, tok slackclient.Token, st onboardingStyles) error {
 	if err := tokenStore.Save(tok); err != nil {
 		return fmt.Errorf("saving token for %s: %w", tok.TeamName, err)
 	}
 	configPath := filepath.Join(xdgConfig(), "config.toml")
+	if cfg, err := config.Load(configPath); err == nil {
+		if _, ok := cfg.WorkspaceByTeamID(tok.TeamID); ok {
+			fmt.Println(st.success.Render("  Updated ") + st.dim.Render(tok.TeamName))
+			return nil
+		}
+	}
 	slug := uniqueSlug(config.Slugify(tok.TeamName), existingSlugs(configPath))
 	if err := appendWorkspaceConfigBlock(configPath, slug, tok.TeamID, tok.TeamName); err != nil {
 		fmt.Println(st.dim.Render("  Note: could not write config.toml: " + err.Error()))

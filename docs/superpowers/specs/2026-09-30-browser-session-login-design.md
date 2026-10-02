@@ -20,13 +20,25 @@ getslk.sh/install still documents it (issue #141).
   `Cookie:` header), the latter being HttpOnly and unreachable from a DevTools
   console snippet. A bare `xoxc-` token also works; the `d` cookie is then
   asked for.
-- The paste is read with the terminal in raw mode, without echo, until a line
-  that does not end with `\` (or Ctrl-D; Ctrl-C cancels). Canonical mode would
+- The paste is read with the terminal in raw mode, without echo, until the
+  command is complete: a line that does not end with a continuation (`\` bash,
+  `^` cmd, a backtick for PowerShell, whose `$session` lines only end once its
+  `Invoke-WebRequest` does), or Ctrl-D; Ctrl-C cancels. Canonical mode would
   truncate lines past 4095 bytes, which a cURL line with its cookies can reach.
+- Whatever is still queued once reading stops (the tail of a paste, keys typed
+  meanwhile) is flushed from the terminal input after a short settle delay,
+  so no token or cookie is left for the shell to read. The terminal is
+  restored by a defer, and on SIGTERM / SIGHUP.
+- The cmd form's caret escapes are stripped before parsing; the PowerShell
+  form's cookie is read from its `System.Net.Cookie("d", ...)`. A cookie pasted
+  decoded (`xoxd-AbC/def+Ghi==`) is URL-encoded, as the desktop flow stores it.
 - The pair goes through `Client.Connect` (auth.test), which yields the team ID,
   name (new `Client.TeamName`) and subdomain; the token is saved with the same
   `saveWorkspace` helper as the desktop flow, so the token file and the
-  `[workspaces.<slug>]` block are identical.
+  `[workspaces.<slug>]` block are identical. Re-adding a team already in
+  `config.toml` only refreshes its token: a second block for the same
+  `team_id` would make `config.Load` reject the file (the general fix for the
+  desktop flow is #148).
 
 ## Limits
 
