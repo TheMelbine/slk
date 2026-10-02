@@ -1937,7 +1937,7 @@ func (m *Model) HitTestReaction(row, col int) (replyIdx int, emoji string, ok bo
 // blockkit.Context. Mirrors messages.Model.blockkitContext so Block
 // Kit blocks and legacy attachments render identically in the thread
 // panel and the main message pane.
-func (m *Model) blockkitContext(msg messages.MessageItem, userNames, channelNames map[string]string) blockkit.Context {
+func (m *Model) blockkitContext(msg messages.MessageItem, userNames, channelNames map[string]string, emojiFlushes *[]func(io.Writer) error) blockkit.Context {
 	var imgCtx imgrender.ImageContext
 	if m.imgRenderer != nil {
 		imgCtx = m.imgRenderer.Context()
@@ -1961,7 +1961,7 @@ func (m *Model) blockkitContext(msg messages.MessageItem, userNames, channelName
 				PlaceCtx:     m.emojiCtx.PlaceCtx,
 				EmojiCells:   m.emojiCtx.Cells,
 				Customs:      m.emojiCtx.Customs,
-				EmojiFlushes: nil,
+				EmojiFlushes: emojiFlushes,
 			})
 		},
 		WrapText: messages.WordWrap,
@@ -2022,7 +2022,7 @@ func (m *Model) renderThreadMessage(msg messages.MessageItem, width int, userNam
 	// renderMessagePlain. Image flushes are aggregated into the shared
 	// `flushes` slice; per-image Hit/SixelRows are discarded (v1 thread
 	// rendering, consistent with the file-attachment path below).
-	bkCtx := m.blockkitContext(msg, userNames, channelNames)
+	bkCtx := m.blockkitContext(msg, userNames, channelNames, &flushes)
 	var bkLines []string
 	bkInteractive := false
 	if len(msg.Blocks) > 0 {

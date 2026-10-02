@@ -19,6 +19,7 @@ import (
 	emojiutil "github.com/gammons/slk/internal/emoji"
 	imgpkg "github.com/gammons/slk/internal/image"
 	"github.com/gammons/slk/internal/ui/imgrender"
+	"github.com/gammons/slk/internal/ui/messages/blockkit"
 	"github.com/gammons/slk/internal/ui/peerstatus"
 	"github.com/gammons/slk/internal/ui/styles"
 )
@@ -1522,6 +1523,51 @@ func TestModel_RenderMessageWithImageEmoji_FlushesThreaded(t *testing.T) {
 	}
 	if totalFlushes > 0 && !flushCalled {
 		t.Errorf("flush callback present but OnFlush sentinel never fired; the slice may hold the wrong callback")
+	}
+}
+
+// An emoji inside a legacy attachment renders through blockkit's
+// RenderText. Its upload callback has to reach the entry's flushes, or
+// the terminal never receives the image for the placeholder cells.
+func TestModel_LegacyAttachmentEmoji_FlushesThreaded(t *testing.T) {
+	emojiutil.SetImageMode(true, 2)
+	t.Cleanup(func() { emojiutil.SetImageMode(false, 2) })
+
+	thumbURL := emojiutil.CDNBaseURL + "1f44d.png"
+	flushCalled := false
+	ff := newFakePlaceFetcher()
+	ff.setPrerendered(emojiutil.EmojiCacheKey(thumbURL), stdimage.Pt(2, 1), imgpkg.Render{
+		Cells: stdimage.Pt(2, 1),
+		Lines: []string{"\U0010EEEE\U0010EEEE"},
+		OnFlush: func(_ io.Writer) error {
+			flushCalled = true
+			return nil
+		},
+	})
+
+	m := New([]MessageItem{{
+		TS:        "1.0",
+		UserName:  "bot",
+		UserID:    "U1",
+		Timestamp: "10:30",
+		LegacyAttachments: []blockkit.LegacyAttachment{
+			{Text: ":thumbsup: host is down"},
+		},
+	}}, "alerts")
+	m.SetEmojiContext(EmojiContext{
+		PlaceCtx: emojiutil.PlaceContext{Fetcher: ff},
+		Cells:    2,
+	})
+
+	_ = m.View(24, 80)
+
+	for _, e := range m.cache {
+		for _, f := range e.flushes {
+			_ = f(io.Discard)
+		}
+	}
+	if !flushCalled {
+		t.Error("attachment emoji upload callback never reached the entry flushes")
 	}
 }
 
