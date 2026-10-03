@@ -289,7 +289,7 @@ func TestExportMessageItem(t *testing.T) {
 		Reactions:       []slack.ItemReaction{{Name: "tada", Count: 2, Users: []string{"U2", "U3"}}},
 		Files:           []slack.File{{Title: "spec.pdf", Mimetype: "application/pdf", Permalink: "https://example.slack.com/files/spec.pdf"}},
 	}}
-	got := exportMessageItem(m, map[string]string{"U1": "alice"}, nil)
+	got := exportMessageItem(m, newUserNameStore(map[string]string{"U1": "alice"}), nil)
 
 	if got.TS != m.Timestamp || got.ThreadTS != m.ThreadTimestamp || got.Text != "hello" || got.Subtype != "thread_broadcast" {
 		t.Errorf("core fields = %+v", got)
@@ -309,11 +309,11 @@ func TestExportMessageItem(t *testing.T) {
 }
 
 func TestExportMessageItem_BotAndUnknownAuthors(t *testing.T) {
-	bot := exportMessageItem(slack.Message{Msg: slack.Msg{BotID: "B1", Username: "deploybot"}}, map[string]string{}, nil)
+	bot := exportMessageItem(slack.Message{Msg: slack.Msg{BotID: "B1", Username: "deploybot"}}, newUserNameStore(nil), nil)
 	if bot.UserID != "B1" || bot.UserName != "deploybot" {
 		t.Errorf("bot author = %q/%q, want B1/deploybot", bot.UserID, bot.UserName)
 	}
-	unknown := exportMessageItem(slack.Message{Msg: slack.Msg{User: "U404"}}, map[string]string{}, nil)
+	unknown := exportMessageItem(slack.Message{Msg: slack.Msg{User: "U404"}}, newUserNameStore(nil), nil)
 	if unknown.UserID != "U404" || unknown.UserName != "U404" {
 		t.Errorf("unknown author = %q/%q, want the raw ID for both", unknown.UserID, unknown.UserName)
 	}
@@ -353,16 +353,17 @@ func TestResolveExportNames_AuthorsAndMentions(t *testing.T) {
 			{UserID: "B1", UserName: "deploybot", Text: "done"},
 		},
 	}}
-	names := map[string]string{"U3": "carol"}
+	store := newUserNameStore(map[string]string{"U3": "carol"})
 	profiles := &fakeProfiles{users: map[string]*slack.User{
 		"U1": slackUser("alice", "Alice A", "aa"),
 		"U2": slackUser("", "Bob B", "bb"),
 	}}
 
 	var warn bytes.Buffer
-	if err := resolveExportNames(context.Background(), convs, names, nil, profiles, &warn); err != nil {
+	if err := resolveExportNames(context.Background(), convs, store, nil, profiles, &warn); err != nil {
 		t.Fatalf("resolveExportNames: %v", err)
 	}
+	names := store.Snapshot()
 	if got := convs[0].Parent.UserName; got != "alice" {
 		t.Errorf("parent author = %q, want alice", got)
 	}
@@ -384,7 +385,7 @@ func TestResolveExportNames_AuthorsAndMentions(t *testing.T) {
 
 func TestResolveExportNames_RetriesAfterRateLimit(t *testing.T) {
 	convs := []export.Conversation{{Parent: messages.MessageItem{UserID: "U1", UserName: "U1"}}}
-	names := map[string]string{}
+	names := newUserNameStore(nil)
 	profiles := &fakeProfiles{
 		users: map[string]*slack.User{"U1": slackUser("alice", "", "")},
 		errs:  map[string][]error{"U1": {fmt.Errorf("getting user info: %w", &slack.RateLimitedError{RetryAfter: time.Millisecond})}},
@@ -405,7 +406,7 @@ func TestResolveExportNames_CancelledDuringRateLimitWait(t *testing.T) {
 	profiles := &fakeProfiles{errs: map[string][]error{"U1": {&slack.RateLimitedError{RetryAfter: time.Hour}}}}
 
 	var warn bytes.Buffer
-	err := resolveExportNames(ctx, convs, map[string]string{}, nil, profiles, &warn)
+	err := resolveExportNames(ctx, convs, newUserNameStore(nil), nil, profiles, &warn)
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("err = %v, want context.Canceled", err)
 	}
@@ -419,7 +420,7 @@ func TestResolveExportNames_WarnsAndKeepsIDWhenLookupFails(t *testing.T) {
 		Parent:  messages.MessageItem{UserID: "U1", UserName: "U1", Text: "hi"},
 		Replies: []messages.MessageItem{{UserID: "U2", UserName: "U2", Text: "hello"}},
 	}}
-	names := map[string]string{}
+	names := newUserNameStore(nil)
 	profiles := &fakeProfiles{
 		users: map[string]*slack.User{"U2": slackUser("bob", "", "")},
 		errs:  map[string][]error{"U1": {errors.New("getting user info: dial tcp: lookup slack.com: no such host")}},

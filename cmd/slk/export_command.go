@@ -228,7 +228,7 @@ func exportChannel(args []string) error {
 	if db != nil {
 		defer db.Close()
 	}
-	userNames := make(map[string]string)
+	userNames := newUserNameStore(nil)
 	convs := exportConversations(raw, userNames, db)
 	if err := resolveExportNames(ctx, convs, userNames, db, client, os.Stderr); err != nil {
 		return err
@@ -239,7 +239,7 @@ func exportChannel(args []string) error {
 		Name:          label,
 		Window:        win,
 		Conversations: convs,
-	}, userNames, channelNames)
+	}, userNames.Snapshot(), channelNames)
 	if err != nil {
 		return err
 	}

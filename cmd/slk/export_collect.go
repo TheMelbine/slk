@@ -170,7 +170,7 @@ func windowReplies(msgs []slack.Message, parentTS string, win export.Window) []s
 // exportConversations converts raw conversations to the export
 // package's form. Author names come from names and db where known and
 // otherwise stay as the raw ID until resolveExportNames fills them in.
-func exportConversations(raw []rawConversation, names map[string]string, db *cache.DB) []export.Conversation {
+func exportConversations(raw []rawConversation, names *userNameStore, db *cache.DB) []export.Conversation {
 	convs := make([]export.Conversation, 0, len(raw))
 	for _, rc := range raw {
 		conv := export.Conversation{
@@ -188,7 +188,7 @@ func exportConversations(raw []rawConversation, names map[string]string, db *cac
 // exportMessageItem converts one Slack message for export. Display
 // times are left blank; export.WriteChannel stamps them in the export
 // timezone.
-func exportMessageItem(m slack.Message, names map[string]string, db *cache.DB) messages.MessageItem {
+func exportMessageItem(m slack.Message, names *userNameStore, db *cache.DB) messages.MessageItem {
 	authorID, userName := messageAuthor(m, names, db, nil)
 	reactions := make([]messages.ReactionItem, 0, len(m.Reactions))
 	for _, r := range m.Reactions {
@@ -226,7 +226,7 @@ func (r *mentionRecorder) record(id string) (string, bool) {
 
 // unresolvedUserIDs returns, sorted, the user IDs convs need a name
 // for that names lacks: authors still shown by raw ID, and mentions.
-func unresolvedUserIDs(convs []export.Conversation, names map[string]string) []string {
+func unresolvedUserIDs(convs []export.Conversation, names *userNameStore) []string {
 	rec := &mentionRecorder{ids: make(map[string]bool)}
 	for _, conv := range convs {
 		for _, msg := range append([]messages.MessageItem{conv.Parent}, conv.Replies...) {
@@ -238,7 +238,7 @@ func unresolvedUserIDs(convs []export.Conversation, names map[string]string) []s
 	}
 	var ids []string
 	for id := range rec.ids {
-		if names[id] == "" {
+		if name, _ := names.Get(id); name == "" {
 			ids = append(ids, id)
 		}
 	}
@@ -252,7 +252,7 @@ func unresolvedUserIDs(convs []export.Conversation, names map[string]string) []s
 // resolved keeps its raw form and is reported on warn with the lookup's
 // error, so a bot ID or deleted user reads differently from a network
 // failure; only a cancelled context is an error.
-func resolveExportNames(ctx context.Context, convs []export.Conversation, names map[string]string, db *cache.DB, profiles exportProfileSource, warn io.Writer) error {
+func resolveExportNames(ctx context.Context, convs []export.Conversation, names *userNameStore, db *cache.DB, profiles exportProfileSource, warn io.Writer) error {
 	for _, id := range unresolvedUserIDs(convs, names) {
 		if _, ok := resolveUserCached(id, names, db); ok {
 			continue
@@ -266,7 +266,7 @@ func resolveExportNames(ctx context.Context, convs []export.Conversation, names 
 			continue
 		}
 		if name != "" {
-			names[id] = name
+			names.Set(id, name)
 		}
 	}
 	for i := range convs {
@@ -310,9 +310,9 @@ func profileDisplayName(u *slack.User) string {
 
 // applyAuthorName replaces a raw-ID author name with its resolved
 // name when names has one.
-func applyAuthorName(msg messages.MessageItem, names map[string]string) messages.MessageItem {
+func applyAuthorName(msg messages.MessageItem, names *userNameStore) messages.MessageItem {
 	if msg.UserName == msg.UserID {
-		if name := names[msg.UserID]; name != "" {
+		if name, _ := names.Get(msg.UserID); name != "" {
 			msg.UserName = name
 		}
 	}
