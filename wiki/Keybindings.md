@@ -28,6 +28,9 @@
 | `Ctrl+f` | Any | Search workspace (Slack server-side; supports modifiers like `from:@user`, `in:#channel`, `before:YYYY-MM-DD`) |
 | `Ctrl+b` | Any | Toggle sidebar |
 | `Ctrl+]` | Any | Toggle thread panel |
+| `Ctrl+a` | Normal | Toggle the Activity view (mentions, thread replies, reactions, DMs) |
+| `:activity` | Normal | Open the Activity view |
+| `u` | Normal (activity) | Toggle the Activity view's unread-only filter |
 | `Ctrl+t` / `Ctrl+p` | Any | Fuzzy channel finder |
 | `:ws` | Normal | Workspace picker |
 | `1`–`9` | Normal | Jump to workspace N |
@@ -39,6 +42,7 @@
 | `S` | Normal (thread) | Save thread to markdown file (`~/.local/share/slk/exports/` or `$XDG_DATA_HOME/slk/exports/`) |
 | `y` | Normal (message) | Copy message text |
 | `Y` / `C` | Normal (message) | Copy message permalink |
+| `F` | Normal (message / thread) | Forward selected message using the channel finder; Enter sends, Esc cancels |
 | `O` / `v` | Normal (message) | Open full-screen image preview |
 | `Esc` / `q` | Preview | Close preview |
 | `Enter` | Preview | Open in system image viewer |

@@ -17,6 +17,7 @@
 package ui
 
 import (
+	"context"
 	"os"
 	"sync"
 
@@ -26,9 +27,6 @@ import (
 	"github.com/gammons/slk/internal/core"
 	"github.com/gammons/slk/internal/editor"
 	"github.com/gammons/slk/internal/ids"
-	"github.com/gammons/slk/internal/ui/compose"
-	"github.com/gammons/slk/internal/ui/presencemenu"
-	"github.com/gammons/slk/internal/ui/themeswitcher"
 )
 
 func (a *App) setThreadFetcherForTest(fn core.ThreadFetchFunc) {
@@ -157,7 +155,7 @@ func coreCmd(c tea.Cmd) core.Cmd {
 	return func() core.Msg { return c() }
 }
 
-func (a *App) setUploaderForTest(fn func(channelID, threadTS, caption string, attachments []compose.PendingAttachment) tea.Cmd) {
+func (a *App) setUploaderForTest(fn func(channelID, threadTS, caption string, attachments []core.PendingAttachment) tea.Cmd) {
 	w := rewire(a, func(w *wiring) {
 		w.upload = func(channelID, threadTS, caption string, attachments []core.PendingAttachment) core.Cmd {
 			return coreCmd(fn(channelID, threadTS, caption, attachments))
@@ -198,11 +196,11 @@ func (a *App) setStatusReporterForTest(fn func(unread, otherUnread int, workspac
 	a.setDesktopForTest(func(d *core.DesktopServiceFuncs) { d.ReportStatus = fn })
 }
 
-func (a *App) setStatusSetterForTest(fn func(action presencemenu.Action, snoozeMinutes int)) {
+func (a *App) setStatusSetterForTest(fn func(action core.PresenceAction, snoozeMinutes int)) {
 	a.SetPresenceService(core.NewPresenceService(fn, nil))
 }
 
-func (a *App) setThemeSaverForTest(fn func(name string, scope themeswitcher.ThemeScope)) {
+func (a *App) setThemeSaverForTest(fn func(name string, scope core.ThemeScope)) {
 	w := rewire(a, func(w *wiring) { w.saveTheme = fn })
 	a.SetSettingsService(core.NewSettingsService(w.saveTheme, w.saveSidebarWidth))
 }
@@ -224,4 +222,10 @@ func (a *App) setWorkspaceUnreadReaderForTest(fn func() []string) {
 
 func (a *App) setWorkspaceSwitcherForTest(fn func(teamID string) tea.Msg) {
 	a.SetWorkspaceService(core.NewWorkspaceService(func(teamID string) core.Msg { return fn(teamID) }))
+}
+
+// setProfileFetcherForTest wires a ProfileService built from fn, for
+// the K-opened user-profile dialog.
+func (a *App) setProfileFetcherForTest(fn func(ctx context.Context, teamID, userID string) (core.UserProfile, error)) {
+	a.SetProfileService(core.NewProfileService(core.ProfileServiceFuncs{Profile: fn}))
 }

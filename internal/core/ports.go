@@ -100,19 +100,45 @@ type ThreadService interface {
 	ThreadLastRead(channelID ids.ChannelID, threadTS ids.ThreadTS) string
 }
 
+// ActivityService is the App's interface to Slack's Activity feed
+// (activity.feed): the notified-items list surfaced by the Activity
+// view — @mentions, thread replies, reactions to your messages, and
+// DMs. Implementations are wired by cmd/slk/main.go.
+//
+// Marking items read is out of scope: opening an item marks the
+// underlying conversation read via existing paths.
+type ActivityService interface {
+	// Fetch loads the first page of the Activity feed for teamID.
+	// limit is the max items; unreadOnly requests the server-side
+	// unread filter. Returns a Msg (typically ActivityListLoadedMsg).
+	Fetch(teamID ids.TeamID, limit int, unreadOnly bool) Msg
+
+	// Hydrate fetches message bodies for the Activity page's refs
+	// (activity.feed returns refs only). refs maps channel ID to the
+	// wanted message timestamps. Returns a Msg (typically
+	// ActivityBodiesLoadedMsg), or nil when there's nothing to fetch.
+	Hydrate(teamID ids.TeamID, refs map[string][]string) Msg
+}
+
 // MessageService is the App's interface to Slack's per-message
-// operations: send, edit, delete, mark-unread, and permalink lookup.
+// operations: send, forward, edit, delete, mark-unread, and permalink lookup.
 // Implementations are wired by cmd/slk/main.go.
 //
-// All methods are best-effort and nil-safe at the adapter level: an
-// implementation built via NewMessageService with a nil component
-// silently no-ops that operation (returning nil Msg or
-// ("", nil) for Permalink).
+// Methods are nil-safe at the adapter level. A nil Forward component
+// returns an unsupported error; other nil components silently no-op
+// (returning nil Msg or ("", nil) for Permalink).
 type MessageService interface {
 	// Send dispatches chat.postMessage for channelID with text.
 	// Returns a Msg (typically MessageSentMsg or
 	// MessageSendFailedMsg).
 	Send(channelID ids.ChannelID, text string) Msg
+
+	// Forward posts the source message's permalink to destinationChannelID
+	// with Slack's native preview. teamID is captured when forwarding begins,
+	// not read from the active workspace when this synchronous call executes.
+	// Callers run it off the Update loop; it does not produce send/compose events.
+	// On success, returns the actual posted timestamp and permalink text.
+	Forward(ctx context.Context, teamID string, sourceChannelID ids.ChannelID, ts ids.MessageTS, destinationChannelID ids.ChannelID) (ForwardResult, error)
 
 	// Edit dispatches chat.update for the message identified by
 	// (channelID, ts), replacing its text with newText.
@@ -320,6 +346,17 @@ type UnreadService interface {
 	// UnreadWorkspaces returns the IDs of workspaces with at least one
 	// channel their sidebar would show as unread.
 	UnreadWorkspaces() []string
+}
+
+// ProfileService fetches other users' full profiles for the user
+// profile dialog: the fields the App's own cached identity data (e.g.
+// display names) doesn't carry — title, pronouns, timezone, email,
+// phone. Implementations are wired by cmd/slk/main.go.
+type ProfileService interface {
+	// Profile fetches userID's profile in workspace teamID. Blocking;
+	// callers run it from a tea.Cmd with a bounded context. Returns a
+	// *RateLimitedError (wrapped) when Slack rate-limits the request.
+	Profile(ctx context.Context, teamID, userID string) (UserProfile, error)
 }
 
 // WorkspaceService switches the active workspace.

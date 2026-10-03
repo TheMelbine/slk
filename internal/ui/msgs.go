@@ -21,7 +21,6 @@ import (
 
 	"github.com/gammons/slk/internal/core"
 	emojiutil "github.com/gammons/slk/internal/emoji"
-	"github.com/gammons/slk/internal/ui/channelfinder"
 	"github.com/gammons/slk/internal/ui/messages"
 	"github.com/gammons/slk/internal/ui/peerstatus"
 	"github.com/gammons/slk/internal/ui/searchresults"
@@ -198,7 +197,41 @@ type (
 	ThreadsListDirtyMsg struct {
 		TeamID string
 	}
-	ConnectionStateMsg struct {
+	// ActivityViewActivatedMsg is dispatched when the user picks the
+	// synthetic Activity sidebar row (or runs :activity). The App
+	// switches the message pane to the Activity view and fetches the
+	// feed. Mirrors ThreadsViewActivatedMsg.
+	ActivityViewActivatedMsg struct{}
+	// ActivityListLoadedMsg carries a freshly loaded page of Activity
+	// feed items for the named workspace. The App ignores it if it
+	// doesn't match the active team. Mirrors ThreadsListLoadedMsg.
+	ActivityListLoadedMsg struct {
+		TeamID string
+		Items  []core.ActivityItem
+	}
+	// ActivitySelectedMsg is dispatched when the user presses Enter on
+	// an Activity row. The App opens the underlying thread (ThreadTS
+	// set) or channel message (jumps to TS) reusing existing helpers.
+	ActivitySelectedMsg struct {
+		ChannelID string
+		TS        string
+		ThreadTS  string
+	}
+	// ActivityBodiesLoadedMsg carries hydrated message bodies for the
+	// refs in a freshly loaded Activity page (fetched via messages.list
+	// as a second step after activity.feed, which returns refs only).
+	// Bodies are keyed by core.ActivityMsgKey(channelID, ts). Ignored
+	// if it doesn't match the active team.
+	ActivityBodiesLoadedMsg struct {
+		TeamID string
+		Bodies map[string]core.ActivityMessage
+	}
+	// ActivityToggleUnreadMsg flips the Activity view's unread-only
+	// filter and re-fetches the feed with the new flag (the server does
+	// the filtering). Dispatched by the unread-toggle key while the
+	// Activity view is focused.
+	ActivityToggleUnreadMsg struct{}
+	ConnectionStateMsg      struct {
 		State int // 0=connecting, 1=connected, 2=disconnected
 	}
 	ReactionAddedMsg struct {
@@ -267,7 +300,7 @@ type (
 		Theme        string // resolved theme name (per-workspace or global default)
 		SidebarWidth int    // resolved sidebar width (per-workspace or global default)
 		Channels     []sidebar.ChannelItem
-		FinderItems  []channelfinder.Item
+		FinderItems  []core.ChannelFinderItem
 		UserNames    map[string]string
 		// UserStatuses is every cached user's custom status, for author
 		// names and DM rows. DND is not cached; RefreshPeerDND fetches it
@@ -291,6 +324,12 @@ type (
 		// batch after the switch applies. It fetches DM peers' DND for
 		// this workspace and delivers results as UserDNDChangeMsg.
 		RefreshPeerDND tea.Cmd
+		// AfterSwitch, if set, is appended to reduceWorkspaceSwitched's
+		// batch after activeTeamID is updated, like RefreshPeerDND. cmd/slk
+		// uses it to start reporting the workspace's newly learned user
+		// names as UserResolvedMsg; any sent before the switch applied
+		// would be dropped as belonging to an inactive workspace.
+		AfterSwitch tea.Cmd
 	}
 	// ReadStateChangedMsg is sent whenever the persistent read state changes,
 	// so panels that read from cache.GetWorkspaceReadState re-render.
@@ -309,7 +348,7 @@ type (
 	ConversationOpenedMsg struct {
 		TeamID     string
 		Item       sidebar.ChannelItem
-		FinderItem channelfinder.Item
+		FinderItem core.ChannelFinderItem
 	}
 	// SectionsRefreshedMsg is sent when a workspace's Slack-native
 	// section state has mutated (via channel_section_* WS events) and
@@ -341,7 +380,7 @@ type (
 		Theme        string // resolved theme name (per-workspace or global default)
 		SidebarWidth int    // resolved sidebar width (per-workspace or global default)
 		Channels     []sidebar.ChannelItem
-		FinderItems  []channelfinder.Item
+		FinderItems  []core.ChannelFinderItem
 		UserNames    map[string]string
 		// UserStatuses is every cached user's custom status, for author
 		// names. DM peers' DND arrives separately after connect.
@@ -410,7 +449,7 @@ type (
 		TeamID string
 		Query  string
 		Gen    uint64
-		Items  []channelfinder.Item
+		Items  []core.ChannelFinderItem
 	}
 	SpinnerTickMsg    struct{}
 	LoadingTimeoutMsg struct{}
@@ -632,6 +671,16 @@ type WSMessageDeletedMsg struct {
 type UploadProgressMsg struct {
 	Done  int
 	Total int
+}
+
+// UserProfileLoadedMsg carries the result of the K-opened user-profile
+// dialog's fetch (core.ProfileService.Profile), successful or not.
+// reduceUserProfile applies it only when the dialog is still visible
+// and still targeting TeamID/UserID; otherwise it is dropped as stale.
+type UserProfileLoadedMsg struct {
+	TeamID, UserID string
+	Profile        core.UserProfile
+	Err            error
 }
 
 // UploadResultMsg carries the final result of an upload batch.

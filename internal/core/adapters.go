@@ -2,8 +2,9 @@
 // declared in ports.go. Implementations are wired by cmd/slk.
 //
 // Each port can be built from plain closures with its NewXxxService
-// constructor; any nil closure makes that method a no-op returning the
-// zero value, which is how tests fake a single method.
+// constructor; nil closures generally make methods no-op returning the
+// zero value, which is how tests fake a single method. Exceptions such as
+// MessageService.Forward return an unsupported error.
 //
 // Constructor shape:
 //   - Services with ≤4 methods take positional func args
@@ -147,11 +148,38 @@ func (t threadAdapter) ThreadLastRead(channelID ids.ChannelID, threadTS ids.Thre
 	return t.fns.ThreadLastRead(channelID, threadTS)
 }
 
+// NewActivityService builds an ActivityService from closures. Either
+// may be nil; the resulting service no-ops that operation (returns a
+// nil Msg).
+func NewActivityService(fetch ActivityFetchFunc, hydrate ActivityHydrateFunc) ActivityService {
+	return activityAdapter{fetch: fetch, hydrate: hydrate}
+}
+
+type activityAdapter struct {
+	fetch   ActivityFetchFunc
+	hydrate ActivityHydrateFunc
+}
+
+func (a activityAdapter) Fetch(teamID ids.TeamID, limit int, unreadOnly bool) Msg {
+	if a.fetch == nil {
+		return nil
+	}
+	return a.fetch(teamID, limit, unreadOnly)
+}
+
+func (a activityAdapter) Hydrate(teamID ids.TeamID, refs map[string][]string) Msg {
+	if a.hydrate == nil {
+		return nil
+	}
+	return a.hydrate(teamID, refs)
+}
+
 // MessageServiceFuncs is the closure bundle accepted by
-// NewMessageService. Any field may be nil; the resulting service
-// no-ops that operation.
+// NewMessageService. Nil Forward returns an unsupported error; other nil
+// fields make the resulting service no-op that operation.
 type MessageServiceFuncs struct {
 	Send       MessageSendFunc
+	Forward    MessageForwardFunc
 	Edit       MessageEditFunc
 	Delete     MessageDeleteFunc
 	MarkUnread MarkUnreadFunc
@@ -173,6 +201,13 @@ func (m messageAdapter) Send(channelID ids.ChannelID, text string) Msg {
 		return nil
 	}
 	return m.fns.Send(channelID, text)
+}
+
+func (m messageAdapter) Forward(ctx context.Context, teamID string, sourceChannelID ids.ChannelID, ts ids.MessageTS, destinationChannelID ids.ChannelID) (ForwardResult, error) {
+	if m.fns.Forward == nil {
+		return ForwardResult{}, errors.New("message forwarding is unsupported")
+	}
+	return m.fns.Forward(ctx, teamID, sourceChannelID, ts, destinationChannelID)
 }
 
 func (m messageAdapter) Edit(channelID ids.ChannelID, ts ids.MessageTS, newText string) Msg {
@@ -537,6 +572,27 @@ func (u unreadAdapter) UnreadWorkspaces() []string {
 	return u.unreadWorkspaces()
 }
 
+// ProfileServiceFuncs is the closure bundle accepted by
+// NewProfileService. A nil Profile func returns errors.ErrUnsupported.
+type ProfileServiceFuncs struct {
+	Profile func(ctx context.Context, teamID, userID string) (UserProfile, error)
+}
+
+// NewProfileService builds a ProfileService from a ProfileServiceFuncs
+// bundle. Used by cmd/slk/main.go (production wiring) and tests.
+func NewProfileService(fns ProfileServiceFuncs) ProfileService {
+	return profileAdapter{fns: fns}
+}
+
+type profileAdapter struct{ fns ProfileServiceFuncs }
+
+func (p profileAdapter) Profile(ctx context.Context, teamID, userID string) (UserProfile, error) {
+	if p.fns.Profile == nil {
+		return UserProfile{}, errors.ErrUnsupported
+	}
+	return p.fns.Profile(ctx, teamID, userID)
+}
+
 // NewWorkspaceService builds a WorkspaceService from a closure.
 func NewWorkspaceService(switchTo func(teamID string) Msg) WorkspaceService {
 	return workspaceAdapter{switchTo: switchTo}
@@ -583,6 +639,10 @@ type OlderMessagesFetchFunc func(channelID ids.ChannelID, oldestTS ids.MessageTS
 // MessageSendFunc is called when the user sends a message. Returns a Msg with the result.
 type MessageSendFunc func(channelID ids.ChannelID, text string) Msg
 
+// MessageForwardFunc forwards a message within the captured workspace,
+// without producing normal send/compose events.
+type MessageForwardFunc func(ctx context.Context, teamID string, sourceChannelID ids.ChannelID, ts ids.MessageTS, destinationChannelID ids.ChannelID) (ForwardResult, error)
+
 // MessageEditFunc performs the chat.update API call. Returns a Msg
 // (typically MessageEditedMsg) describing the result.
 type MessageEditFunc func(channelID ids.ChannelID, ts ids.MessageTS, newText string) Msg
@@ -621,6 +681,15 @@ type ThreadReplySendFunc func(channelID ids.ChannelID, threadTS ids.ThreadTS, te
 // ThreadsListFetchFunc loads the involved-threads list for a workspace.
 // Returns the resulting Msg (typically ThreadsListLoadedMsg).
 type ThreadsListFetchFunc func(teamID ids.TeamID) Msg
+
+// ActivityFetchFunc loads the first page of the Activity feed for a
+// workspace. Returns the resulting Msg (typically
+// ActivityListLoadedMsg).
+type ActivityFetchFunc func(teamID ids.TeamID, limit int, unreadOnly bool) Msg
+
+// ActivityHydrateFunc fetches message bodies for a page's refs.
+// Returns the resulting Msg (typically ActivityBodiesLoadedMsg).
+type ActivityHydrateFunc func(teamID ids.TeamID, refs map[string][]string) Msg
 
 type ReactionAddFunc func(channelID ids.ChannelID, messageTS ids.MessageTS, emoji string) error
 type ReactionRemoveFunc func(channelID ids.ChannelID, messageTS ids.MessageTS, emoji string) error

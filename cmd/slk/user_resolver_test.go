@@ -566,7 +566,7 @@ func TestResolveDMNames(t *testing.T) {
 	}}
 	wctx := &WorkspaceContext{
 		TeamID:       "T1",
-		UserNames:    map[string]string{},
+		UserNames:    newUserNameStore(nil),
 		BotUserIDs:   map[string]bool{},
 		UserResolver: newUserResolver("T1", nil, db, nil, nil, batcher, nil),
 		UnresolvedDMs: []UnresolvedDM{
@@ -633,7 +633,7 @@ func TestResolveDMNames_FallbackPersistsStatusAndEmitsMessage(t *testing.T) {
 	wctx := &WorkspaceContext{
 		TeamID:       "T1",
 		Client:       client,
-		UserNames:    map[string]string{},
+		UserNames:    newUserNameStore(nil),
 		BotUserIDs:   map[string]bool{},
 		UserResolver: newUserResolver("T1", nil, db, nil, nil, batcher, nil),
 		UnresolvedDMs: []UnresolvedDM{
@@ -671,6 +671,24 @@ func TestResolveDMNames_FallbackPersistsStatusAndEmitsMessage(t *testing.T) {
 	}
 	if status.TeamID != "T1" || status.Emoji != ":palm_tree:" || status.Text != "Vacation" || status.Huddle != "in_a_huddle" {
 		t.Errorf("emitted status = %+v", status)
+	}
+
+	// The UI holds a snapshot of the name store, not the store, so a
+	// name the fallback fetches only reaches rendered history through
+	// UserResolvedMsg. Before 2026-10-02 the UI shared the map and saw
+	// the (racy) write instead.
+	var resolved *ui.UserResolvedMsg
+	for _, m := range sent {
+		if r, ok := m.(ui.UserResolvedMsg); ok && r.UserID == "U_BOB" {
+			c := r
+			resolved = &c
+		}
+	}
+	if resolved == nil || resolved.TeamID != "T1" || resolved.DisplayName != "Bob" {
+		t.Errorf("UserResolvedMsg for U_BOB = %+v; want TeamID T1, DisplayName Bob", resolved)
+	}
+	if name, ok := wctx.UserNames.Get("U_BOB"); !ok || name != "Bob" {
+		t.Errorf("name store U_BOB = (%q, %v); want (\"Bob\", true)", name, ok)
 	}
 }
 
@@ -737,4 +755,63 @@ func TestUserResolver_FirstSightEdgeDeliversPeerStatus(t *testing.T) {
 		}
 	}
 	t.Fatal("first-sight edge resolution emitted no peer status")
+}
+
+// TestUserResolver_RecordsNamesInStore: names the resolver fetches
+// must land in the workspace's name store, not only in SQLite. The UI
+// drops a UserResolvedMsg for a workspace it is not showing, so for an
+// inactive workspace the store is the only place the name survives
+// until the user switches to it (the switch snapshot carries it).
+// Before this, a name resolved while inactive was in SQLite only;
+// Request's cache-skip gate then never re-resolved it, and the
+// switched-to UI showed the raw ID.
+func TestUserResolver_RecordsNamesInStore(t *testing.T) {
+	t.Run("edge batch", func(t *testing.T) {
+		db := newTestDB(t)
+		r := newUserResolver("T1", nil, db, nil, nil, &fakeBatcher{res: []edge.User{
+			edgeUserRecord("U1", "alice", "Alice", "", "T1", 7, false),
+		}}, nil)
+		store := newUserNameStore(nil)
+		r.names = store
+		if got := r.ResolveNow([]string{"U1"}); len(got) != 1 {
+			t.Fatalf("ResolveNow returned %d users; want 1", len(got))
+		}
+		if name, ok := store.Get("U1"); !ok || name != "Alice" {
+			t.Errorf("store U1 = (%q, %v); want (\"Alice\", true)", name, ok)
+		}
+	})
+	t.Run("per-user users.info", func(t *testing.T) {
+		srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true,"user":{"id":"U2","name":"bob","team_id":"T1","profile":{"display_name":"Bob"}}}`))
+		}))
+		defer srv.Close()
+		db := newTestDB(t)
+		watch := newResolvedWatch(1, nil)
+		r := newUserResolver("T1", newTestClient(t, srv), db, nil, watch.send, nil, nil)
+		store := newUserNameStore(nil)
+		r.names = store
+		r.Request("U2")
+		<-watch.done
+		if name, ok := store.Get("U2"); !ok || name != "Bob" {
+			t.Errorf("store U2 = (%q, %v); want (\"Bob\", true)", name, ok)
+		}
+	})
+	t.Run("bots.info", func(t *testing.T) {
+		srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true,"bot":{"id":"B1","name":"deploybot","icons":{}}}`))
+		}))
+		defer srv.Close()
+		db := newTestDB(t)
+		watch := newResolvedWatch(1, nil)
+		r := newUserResolver("T1", newTestClient(t, srv), db, nil, watch.send, nil, nil)
+		store := newUserNameStore(nil)
+		r.names = store
+		r.RequestBot("B1", "")
+		<-watch.done
+		if name, ok := store.Get("B1"); !ok || name != "deploybot" {
+			t.Errorf("store B1 = (%q, %v); want (\"deploybot\", true)", name, ok)
+		}
+	})
 }

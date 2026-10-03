@@ -17,8 +17,11 @@
 - ANSI-aware wrapping and truncation (no broken color codes mid-line)
 - Drag-to-copy: drag the mouse across messages to highlight them; release to copy plain text to the system clipboard via OSC 52
 - Copy message text (`y`) and copy permalink (`Y` / `C`) to the system clipboard via OSC 52
+- Forward a message or thread reply (`F`) — the same fuzzy picker as `Ctrl+t`, limited to joined channels and existing DMs in the current workspace. Enter shares the original permalink with Slack preview unfurling enabled; Esc cancels. Keeps your current channel and draft unchanged. Slack controls preview availability and access to the original message. Pressing Enter on the forwarded message navigates to the original.
 
 ## Compose
+
+![Composing a DM to Sam and getting a live reply](https://github.com/gammons/slk/raw/main/docs/assets/demo/compose.gif)
 
 - Multi-line input, `Shift+Enter` for newlines
 - External editor (`Ctrl+E`) — opens the draft in `$VISUAL`, then `$EDITOR`, then `[compose] editor` from config; the edited text replaces the draft when the editor exits
@@ -43,14 +46,21 @@ See [[Terminal Compatibility|Terminal-Compatibility]] for which protocol your te
 
 ## Threads
 
-- Side panel (35% width), opened with `Enter`, toggled with `Ctrl+]`
+![Opening a deploy thread, a live reply arriving, and replying in the thread](https://github.com/gammons/slk/raw/main/docs/assets/demo/threads.gif)
+
+- Opens beside the channel (at least 80 columns wide) with `Enter`, toggled
+  with `Ctrl+]`. On terminals too narrow to fit both panes, the thread and
+  channel stack instead: only one is shown at a time, and focus decides which
+  — `Tab` / `Shift+Tab` switch between them, `Esc` or `q` closes the thread.
+  The header is a breadcrumb naming the channel, the thread's author, and the
+  reply count (e.g. `# general › Thread from alice · 2 replies`).
 - Live thread reply routing, real-time updates
 - Also send to channel: `Ctrl+O` while composing a thread reply toggles Slack's
   "Also send to #channel" broadcast (`reply_broadcast=true`), and `Alt+Enter`
   sends with broadcast in a single keystroke. An accent-colored
   `↪ also send to #channel` line under the input shows when it's armed; the
   toggle is non-sticky (cleared after send or when opening another thread).
-- Auto-closes on channel switch or narrow terminals
+- Closes on channel switch
 - **Threads view** (`⚑ Threads` at top of sidebar): scrollable list of every
   thread you authored, replied to, or were @-mentioned in for the active
   workspace. Unread first, then newest activity. Selecting a thread opens
@@ -58,7 +68,28 @@ See [[Terminal Compatibility|Terminal-Compatibility]] for which protocol your te
   v1 is computed from the local SQLite cache, so threads from channels
   you have not yet opened in slk will not appear until they are seen.
 
+## Activity
+
+- **Activity view** (`◉ Activity` in the sidebar, below Threads): the same
+  feed as the Activity tab in the official client — @mentions (including
+  `@here`/`@channel`, user groups and keywords), replies in threads you
+  follow, reactions to your messages, and DMs. Open it from the sidebar,
+  with `Ctrl+a` (which toggles back to your channel), or with `:activity`.
+- Each item is a card: who, what happened and where (`Mention in #general`,
+  `Reacted in DM`, `Thread in ◆ private`), how long ago, and an unread dot,
+  over the message itself — rendered like the message pane, with emoji,
+  mentions and channel links. Reactions lead with the emoji; DMs are headed
+  by the other person, and your own latest message reads `You: …`
+- `Enter` opens the item: a thread reply opens the thread in the side panel,
+  anything else jumps to the message in its channel
+- `u` toggles unread-only (filtered by Slack, not locally)
+- Shows the 50 most recent items. The sidebar badge counts the unread ones;
+  it refreshes when the workspace connects, when you switch workspaces, and
+  whenever you open the view
+
 ## Reactions
+
+![Teammates' reactions arriving live, then adding one with the reaction picker](https://github.com/gammons/slk/raw/main/docs/assets/demo/reactions.gif)
 
 - Search-first picker overlay (`r`) with frecent emoji
 - Quick-toggle nav across existing pills (`R`, then `h/l/Enter`)
@@ -66,6 +97,8 @@ See [[Terminal Compatibility|Terminal-Compatibility]] for which protocol your te
 - Optimistic UI, deduped against the WebSocket echo
 
 ## Channels & Workspaces
+
+![A workspace's unread badge lighting up in the rail, then switching to it](https://github.com/gammons/slk/raw/main/docs/assets/demo/workspaces.gif)
 
 - Three-panel layout: workspace rail, channel sidebar, message pane
 - Public (`#`), private (`◆`), DM (`●`/`○` for presence, `⊘` while the other person is in Do Not Disturb), and group DM channels
@@ -131,6 +164,8 @@ See [[Terminal Compatibility|Terminal-Compatibility]] for which protocol your te
 - Three-state connection indicator in the status bar
 
 ## Customization
+
+![Switching between themes with the theme switcher](https://github.com/gammons/slk/raw/main/docs/assets/demo/themes.gif)
 
 - 59 built-in themes (including `ANSI Dark` / `ANSI Light` that inherit your terminal palette)
 - Drop-in custom themes (`~/.config/slk/themes/*.toml`)

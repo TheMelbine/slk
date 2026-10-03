@@ -45,6 +45,20 @@ func handleNormalMode(a *App, msg tea.KeyMsg) tea.Cmd {
 		return a.handleWindowChord(msg)
 	}
 
+	// `g` pending sub-state: a second `g` completes the vim `gg` chord
+	// (jump to top). Esc cancels silently; any other key cancels the
+	// chord and is then handled as if it had been pressed on its own.
+	if a.pendingTop {
+		a.pendingTop = false
+		a.statusbar.SetHelpHint(a.defaultHelpHint())
+		switch {
+		case key.Matches(msg, a.keys.Top):
+			return a.handleGoToTop()
+		case key.Matches(msg, a.keys.Escape):
+			return nil
+		}
+	}
+
 	// Reaction-nav sub-state (intercept before normal keys).
 	if a.focusedPanel == PanelMessages && a.messagepane.ReactionNavActive() {
 		return a.handleReactionNav(msg)
@@ -59,8 +73,12 @@ func handleNormalMode(a *App, msg tea.KeyMsg) tea.Cmd {
 		// In the Threads view there is no main compose box -- the
 		// only way to type is into the right-side thread panel's
 		// compose. Force focus there even when the threads list
-		// itself was the focused panel.
-		if a.focusedPanel == PanelThread || (a.view == ViewThreads && a.threadVisible) {
+		// itself was the focused panel. Same for a stacked, narrow
+		// layout where the thread is the only content pane drawn
+		// (e.g. focus on the sidebar): typing must land where the
+		// user can see it, not in a channel compose hidden behind
+		// the thread.
+		if a.focusedPanel == PanelThread || (a.view == ViewThreads && a.threadVisible) || a.threadDrawnAlone() {
 			a.focusedPanel = PanelThread
 			return a.threadCompose.Focus()
 		}
@@ -118,6 +136,23 @@ func handleNormalMode(a *App, msg tea.KeyMsg) tea.Cmd {
 		a.SetMode(ModeWorkspaceSearch)
 		return nil
 
+	case key.Matches(msg, a.keys.ActivityView):
+		// Global toggle for the Activity feed (the desktop client's
+		// Cmd+Shift+A). Pressing it in the Activity view returns to the
+		// channel view you came from; pressing it anywhere else opens
+		// Activity. Mirrors :activity and clicking the sidebar row.
+		if a.view == ViewActivity {
+			a.view = ViewChannels
+			a.sidebar.SetActivityActive(false)
+			if a.activeChannelID != "" {
+				a.sidebar.SelectByID(a.activeChannelID)
+			}
+			a.focusedPanel = PanelMessages
+			return nil
+		}
+		a.sidebar.SelectActivityRow()
+		return func() tea.Msg { return ActivityViewActivatedMsg{} }
+
 	case key.Matches(msg, a.keys.Tab):
 		a.FocusNext()
 
@@ -169,6 +204,9 @@ func handleNormalMode(a *App, msg tea.KeyMsg) tea.Cmd {
 		a.FocusNext()
 
 	case key.Matches(msg, a.keys.Enter):
+		if cmd, ok := a.openForwardedSelected(); ok {
+			return cmd
+		}
 		return a.handleEnter()
 
 	case key.Matches(msg, a.keys.ToggleSection):
@@ -181,6 +219,12 @@ func handleNormalMode(a *App, msg tea.KeyMsg) tea.Cmd {
 				return nil
 			}
 		}
+
+	case key.Matches(msg, a.keys.Top):
+		// First half of the `gg` chord; see the pendingTop guard above.
+		a.pendingTop = true
+		a.statusbar.SetHelpHint("g …")
+		return nil
 
 	case key.Matches(msg, a.keys.Bottom):
 		if cmd := a.handleGoToBottom(); cmd != nil {
@@ -254,6 +298,9 @@ func handleNormalMode(a *App, msg tea.KeyMsg) tea.Cmd {
 	case key.Matches(msg, a.keys.ListReactions):
 		return a.openReactionsView()
 
+	case key.Matches(msg, a.keys.UserProfile):
+		return a.openUserProfile()
+
 	case key.Matches(msg, a.keys.SaveThread):
 		return a.saveThreadToFile()
 
@@ -262,6 +309,9 @@ func handleNormalMode(a *App, msg tea.KeyMsg) tea.Cmd {
 
 	case key.Matches(msg, a.keys.CopyPermalink):
 		return a.copyPermalinkOfSelected()
+
+	case key.Matches(msg, a.keys.ForwardMessage):
+		return a.beginForwardOfSelected()
 
 	case key.Matches(msg, a.keys.Edit):
 		return a.beginEditOfSelected()
@@ -274,6 +324,9 @@ func handleNormalMode(a *App, msg tea.KeyMsg) tea.Cmd {
 
 	case key.Matches(msg, a.keys.OpenLink):
 		return a.openLinksOfSelected()
+
+	case a.view == ViewActivity && key.Matches(msg, a.keys.ActivityUnread):
+		return func() tea.Msg { return ActivityToggleUnreadMsg{} }
 
 	case key.Matches(msg, a.keys.DownloadFile):
 		return a.downloadFilesOfSelected()

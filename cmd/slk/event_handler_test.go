@@ -12,8 +12,8 @@ import (
 
 	"github.com/gammons/slk/internal/cache"
 	"github.com/gammons/slk/internal/config"
+	"github.com/gammons/slk/internal/core"
 	"github.com/gammons/slk/internal/ui"
-	"github.com/gammons/slk/internal/ui/channelfinder"
 	"github.com/gammons/slk/internal/ui/sidebar"
 	"github.com/slack-go/slack"
 )
@@ -25,10 +25,10 @@ import (
 func TestOnConversationOpened_AppendsAndSends(t *testing.T) {
 	wctx := &WorkspaceContext{
 		BotUserIDs:        map[string]bool{},
-		UserNames:         map[string]string{},
+		UserNames:         newUserNameStore(nil),
 		UserNamesByHandle: map[string]string{},
 		Channels:          []sidebar.ChannelItem{{ID: "C1", Name: "general", Type: "channel"}},
-		FinderItems:       []channelfinder.Item{{ID: "C1", Name: "general", Type: "channel", Joined: true}},
+		FinderItems:       []core.ChannelFinderItem{{ID: "C1", Name: "general", Type: "channel", Joined: true}},
 	}
 	h := &rtmEventHandler{
 		wsCtx:        wctx,
@@ -69,7 +69,7 @@ func TestOnConversationOpened_SeedsDMStatusFromCache(t *testing.T) {
 	}
 	wctx := &WorkspaceContext{
 		BotUserIDs:        map[string]bool{},
-		UserNames:         map[string]string{"U1": "alice"},
+		UserNames:         newUserNameStore(map[string]string{"U1": "alice"}),
 		UserNamesByHandle: map[string]string{},
 	}
 	h := &rtmEventHandler{
@@ -107,13 +107,13 @@ func TestOnConversationOpened_SeedsDMStatusFromCache(t *testing.T) {
 func TestOnConversationOpened_DedupesByID(t *testing.T) {
 	wctx := &WorkspaceContext{
 		BotUserIDs:        map[string]bool{},
-		UserNames:         map[string]string{},
+		UserNames:         newUserNameStore(nil),
 		UserNamesByHandle: map[string]string{"alice": "Alice", "bob": "Bob"},
 		Channels: []sidebar.ChannelItem{
 			{ID: "G1", Name: "old", Type: "group_dm"},
 		},
 		// Seed FinderItems so we can assert dedupe doesn't double-add.
-		FinderItems: []channelfinder.Item{
+		FinderItems: []core.ChannelFinderItem{
 			{ID: "G1", Name: "old", Type: "group_dm", Joined: true},
 		},
 	}
@@ -153,7 +153,7 @@ func TestOnConversationOpened_DedupesByID(t *testing.T) {
 func TestOnConversationOpened_InactiveWorkspace_PersistsContext(t *testing.T) {
 	wctx := &WorkspaceContext{
 		BotUserIDs:        map[string]bool{},
-		UserNames:         map[string]string{},
+		UserNames:         newUserNameStore(nil),
 		UserNamesByHandle: map[string]string{},
 	}
 	h := &rtmEventHandler{
@@ -378,7 +378,7 @@ func TestOnMessage_UnknownConversation_AddsItUnread(t *testing.T) {
 	db := newTestDB(t)
 	wctx := &WorkspaceContext{
 		BotUserIDs:        map[string]bool{},
-		UserNames:         map[string]string{},
+		UserNames:         newUserNameStore(nil),
 		UserNamesByHandle: map[string]string{},
 	}
 	var sent []string
@@ -439,7 +439,7 @@ func TestOnMessage_UnknownConversation_RetryDependsOnFailure(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			wctx := &WorkspaceContext{
 				BotUserIDs:        map[string]bool{},
-				UserNames:         map[string]string{},
+				UserNames:         newUserNameStore(nil),
 				UserNamesByHandle: map[string]string{},
 			}
 			lookups := 0

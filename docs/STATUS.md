@@ -53,7 +53,7 @@ Last updated: 2026-05-03
 - [x] Message editing (`E` on own message; reuses compose with stash/restore draft)
 - [x] Message deletion (`D` on own message; centered confirmation overlay)
 - [x] Paste-to-upload via `Ctrl+V` in insert mode (clipboard image, file path, or text fallback) using Slack's V2 file-upload API; multiple attachments + caption send together; status-bar progress + error toasts
-- [x] OSC 52 clipboard integration for message selection, message text (`y`), and permalink copying (`Y` / `C`)
+- [x] Clipboard integration for message selection, message text (`y`), and permalink copying (`Y` / `C`): local macOS `pbcopy`, OSC 52 elsewhere and over SSH
 - [x] In-place update on `message_changed` echoes (no duplicate row on edit)
 - [x] Live removal on `message_deleted` echoes from any client
 - [x] @mention autocomplete in compose (inline picker, translates to <@UserID> on send)
@@ -70,7 +70,9 @@ Last updated: 2026-05-03
 - [x] Block Kit & legacy attachment rendering -- bot messages render with structure (sections, fields, color stripes), with disabled controls visible and an "↗ open in Slack to interact" hint
 
 ### Threads
-- [x] Thread panel -- side panel (35% width) for viewing and replying to threads
+- [x] Thread panel -- opens beside the channel (at least 80 columns wide) for
+      viewing and replying to threads; on narrow terminals the thread and
+      channel stack, with focus deciding which is shown
 - [x] Enter on message opens thread, Escape closes
 - [x] Ctrl+] toggles thread panel
 - [x] Thread replies with green left-border selection

@@ -39,12 +39,15 @@ type KeyMap struct {
 	Delete              key.Binding
 	CopyMessage         key.Binding
 	CopyPermalink       key.Binding
+	ForwardMessage      key.Binding
 	OpenPreview         key.Binding
 	OpenLink            key.Binding
 	DownloadFile        key.Binding
 	MarkUnread          key.Binding
 	NextUnread          key.Binding
 	PrevUnread          key.Binding
+	ActivityView        key.Binding
+	ActivityUnread      key.Binding
 	WorkspaceFinder     key.Binding
 	NewMessage          key.Binding
 	ThemeSwitcher       key.Binding
@@ -56,6 +59,7 @@ type KeyMap struct {
 	Help                key.Binding
 	SaveThread          key.Binding
 	ListReactions       key.Binding
+	UserProfile         key.Binding
 	WindowPrefix        key.Binding
 	WinSplit            key.Binding
 	WinVSplit           key.Binding
@@ -104,12 +108,15 @@ func DefaultKeyMap() KeyMap {
 		Delete:          key.NewBinding(key.WithKeys("D"), key.WithHelp("D", "delete message")),
 		CopyMessage:     key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "copy message")),
 		CopyPermalink:   key.NewBinding(key.WithKeys("Y", "C"), key.WithHelp("Y/C", "copy permalink")),
+		ForwardMessage:  key.NewBinding(key.WithKeys("F"), key.WithHelp("F", "forward message")),
 		OpenPreview:     key.NewBinding(key.WithKeys("O", "v"), key.WithHelp("O/v", "open image preview")),
 		OpenLink:        key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open link in message")),
 		DownloadFile:    key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "download file in message")),
 		MarkUnread:      key.NewBinding(key.WithKeys("U"), key.WithHelp("U", "mark unread")),
 		NextUnread:      key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "next unread channel")),
 		PrevUnread:      key.NewBinding(key.WithKeys("A"), key.WithHelp("A", "prev unread channel")),
+		ActivityView:    key.NewBinding(key.WithKeys("ctrl+a"), key.WithHelp("ctrl+a", "open activity")),
+		ActivityUnread:  key.NewBinding(key.WithKeys("u"), key.WithHelp("u", "Activity: toggle unread-only")),
 		// Keyless: ctrl+w is reserved as the window-command prefix
 		// (window-management design §4). The keyless binding never
 		// matches but keeps the help-overlay entry pointing at :ws
@@ -119,12 +126,13 @@ func DefaultKeyMap() KeyMap {
 		ThemeSwitcher:       key.NewBinding(key.WithKeys("ctrl+y"), key.WithHelp("ctrl+y", "switch theme (per workspace)")),
 		ThemeSwitcherGlobal: key.NewBinding(key.WithKeys("ctrl+shift+y"), key.WithHelp("ctrl+shift+y", "set default theme")),
 		PresenceMenu:        key.NewBinding(key.WithKeys("ctrl+s"), key.WithHelp("ctrl+s", "set status")),
-		ToggleSection:       key.NewBinding(key.WithKeys(" "), key.WithHelp("space", "toggle section")),
+		ToggleSection:       key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "toggle section")),
 		NavBack:             key.NewBinding(key.WithKeys("ctrl+h"), key.WithHelp("ctrl+h", "navigate back")),
 		NavForward:          key.NewBinding(key.WithKeys("ctrl+k"), key.WithHelp("ctrl+k", "navigate forward")),
 		Help:                key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "show keybindings")),
 		SaveThread:          key.NewBinding(key.WithKeys("S"), key.WithHelp("S", "save thread")),
 		ListReactions:       key.NewBinding(key.WithKeys("L"), key.WithHelp("L", "list reactions")),
+		UserProfile:         key.NewBinding(key.WithKeys("K"), key.WithHelp("K", "show author's profile")),
 		// Window commands (design §4). WindowPrefix is the only real
 		// binding; the Win* entries are keyless help-only bindings
 		// (same trick as WorkspaceFinder above) — actual dispatch of

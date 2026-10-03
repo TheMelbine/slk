@@ -36,9 +36,11 @@ type SlackAPI interface {
 	GetUserGroupsContext(ctx context.Context, options ...slack.GetUserGroupsOption) ([]slack.UserGroup, error)
 	GetUsersInConversationContext(ctx context.Context, params *slack.GetUsersInConversationParameters) ([]string, string, error)
 	GetUserInfo(user string) (*slack.User, error)
+	GetUserInfoContext(ctx context.Context, user string) (*slack.User, error)
 	GetBotInfoContext(ctx context.Context, parameters slack.GetBotInfoParameters) (*slack.Bot, error)
 	GetEmojiContext(ctx context.Context) (map[string]string, error)
 	PostMessage(channelID string, options ...slack.MsgOption) (string, string, error)
+	PostMessageContext(ctx context.Context, channelID string, options ...slack.MsgOption) (string, string, error)
 	UpdateMessage(channelID, timestamp string, options ...slack.MsgOption) (string, string, string, error)
 	DeleteMessage(channelID, timestamp string) (string, string, error)
 	AddReaction(name string, item slack.ItemRef) error
@@ -624,6 +626,14 @@ func (c *Client) GetUserProfile(userID string) (*slack.User, error) {
 		return nil, fmt.Errorf("getting user info: %w", err)
 	}
 	return user, nil
+}
+
+// GetUserProfileContext fetches a single user's full profile by ID
+// (users.info), for the user profile dialog. Unlike GetUserProfile,
+// errors are returned unwrapped so callers can type-assert
+// *slack.RateLimitedError.
+func (c *Client) GetUserProfileContext(ctx context.Context, userID string) (*slack.User, error) {
+	return c.api.GetUserInfoContext(ctx, userID)
 }
 
 // GetBotInfo fetches a bot's name and icon by bot ID (the `bot_id` on a
@@ -1770,6 +1780,9 @@ type slackThreadRootMsg struct {
 	ThreadTS   string `json:"thread_ts"`
 	LastRead   string `json:"last_read"`
 	Subscribed bool   `json:"subscribed"`
+	// LatestReply is the sort key of the Threads view and therefore
+	// the pagination cursor; see ListThreadSubscriptions.
+	LatestReply string `json:"latest_reply"`
 }
 
 // listThreadSubscriptionsHardCap bounds how many subscriptions
@@ -1780,9 +1793,21 @@ const listThreadSubscriptionsHardCap = 1000
 // ListThreadSubscriptions fetches the workspace's full subscribed-
 // threads list via Slack's internal subscriptions.thread.getView
 // endpoint (the same call the official web client makes when
-// bootstrapping its Threads view). Paginates via the `current_ts`
-// form field (set to the previous response's max_ts), terminated by
-// has_more=false. Stops at listThreadSubscriptionsHardCap items.
+// bootstrapping its Threads view). Stops at
+// listThreadSubscriptionsHardCap items.
+//
+// Pagination, as captured from the web client (HAR, 2026-10-02):
+// threads come newest root_msg.latest_reply first, and the next
+// request's current_ts is the latest_reply of the last thread on the
+// previous page (exclusive). The response's max_ts is NOT the cursor:
+// on page one it is a future watermark (now + ~1h), and sending that
+// back re-serves page one forever. That was the bug that left the
+// Threads view holding only the first page.
+//
+// A cursor that fails to move strictly older is an error, not an end:
+// the caller reconciles against the returned set and tombstones every
+// thread missing from it, so a silently truncated list would drop
+// real subscriptions.
 //
 // Items where root_msg.subscribed is false are filtered out —
 // defensive, since the live endpoint hasn't been observed returning
@@ -1827,12 +1852,19 @@ func (c *Client) ListThreadSubscriptions(ctx context.Context) ([]ThreadSubscript
 		if !resp.OK {
 			return nil, fmt.Errorf("subscriptions.thread.getView: %s (body=%s)", resp.Error, truncateForLog(body))
 		}
+		nextTS := ""
 		for _, item := range resp.Threads {
 			var sm slackThreadRootMsg
 			if err := json.Unmarshal(item.RootMsg, &sm); err != nil {
 				// Skip malformed items but keep paginating.
 				debuglog.Backfill("ListThreadSubscriptions: skipping malformed root_msg: %v", err)
 				continue
+			}
+			// Cursor from every item, subscribed or not: it is a
+			// position in the server's ordering, not a filter result.
+			nextTS = sm.LatestReply
+			if nextTS == "" {
+				nextTS = sm.ThreadTS
 			}
 			if !sm.Subscribed {
 				continue
@@ -1860,16 +1892,15 @@ func (c *Client) ListThreadSubscriptions(ctx context.Context) ([]ThreadSubscript
 				return all, nil
 			}
 		}
-		if !resp.HasMore || resp.MaxTS == "" {
+		if !resp.HasMore {
 			break
 		}
-		// Note: unlike GetChannelSections we do NOT bail when the
-		// server echoes back the same MaxTS — the
-		// listThreadSubscriptionsHardCap above is the runaway-protection
-		// mechanism for this endpoint, and the hard-cap test exercises
-		// exactly that case (server returns has_more=true with an
-		// unchanging max_ts forever).
-		currentTS = resp.MaxTS
+		// Slack ts are fixed-width "secs.micros", so string order is
+		// time order.
+		if nextTS == "" || (currentTS != "" && nextTS >= currentTS) {
+			return nil, fmt.Errorf("subscriptions.thread.getView: pagination cursor did not advance (current_ts=%q next=%q)", currentTS, nextTS)
+		}
+		currentTS = nextTS
 	}
 	return all, nil
 }
