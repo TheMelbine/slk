@@ -260,11 +260,20 @@ func (r *userResolver) RequestAvatar(userID string) {
 	go r.backfillAvatar(userID)
 }
 
-// backfillAvatar is RequestAvatar's synchronous worker: one users.info
-// call, then the URL is stored (only where avatar_url is still empty)
+// backfillAvatar is RequestAvatar's synchronous worker: a URL already
+// in SQLite is used as is; otherwise one users.info call, then the URL
+// is stored (only where avatar_url is still empty)
 // so the next launch has it at connect time, and preloaded, so this
 // session's AvatarReadyMsg redraws the row.
 func (r *userResolver) backfillAvatar(userID string) {
+	// Users the edge batch resolved this session have their URL in
+	// SQLite but not in wctx.AvatarURLs, so their first render lands
+	// here. Their avatar needs no users.info call: edge batching exists
+	// to avoid exactly one call per newly seen author.
+	if u, err := r.db.GetUser(userID); err == nil && u.AvatarURL != "" {
+		r.avatars.Preload(userID, u.AvatarURL)
+		return
+	}
 	if r.sem != nil {
 		r.sem <- struct{}{}
 		defer func() { <-r.sem }()

@@ -148,6 +148,33 @@ func TestBackfillAvatar_StoresAndPreloadsLargestSize(t *testing.T) {
 	}
 }
 
+// A user the edge batch resolved this session has an avatar_url in
+// SQLite but none in wctx.AvatarURLs, so a render before their avatar
+// lands asks for a backfill. That must not cost a users.info call per
+// newly seen author: edge batching exists to remove exactly that.
+func TestBackfillAvatar_UsesStoredURLWithoutUsersInfo(t *testing.T) {
+	img := avatarPNGServer(t)
+	srv, hits := usersInfoServer(t, map[string]string{"U_EDGE": fmt.Sprintf(`{"image_72":"%s/72"}`, img.URL)})
+	db := newTestDB(t)
+	if err := db.UpsertUser(cache.User{ID: "U_EDGE", WorkspaceID: "T1", Name: "e", DisplayName: "E", AvatarURL: img.URL + "/stored"}); err != nil {
+		t.Fatal(err)
+	}
+	avc, ready := newReadyAvatarCache(t)
+	r := newUserResolver("T1", newTestClient(t, srv), db, avc, nil, nil, nil)
+
+	r.backfillAvatar("U_EDGE")
+
+	if got := <-ready; got != "U_EDGE" {
+		t.Fatalf("onReady for %q; want U_EDGE", got)
+	}
+	if n := hits.get("U_EDGE"); n != 0 {
+		t.Errorf("users.info calls = %d; want 0 (the stored URL was enough)", n)
+	}
+	if got := storedAvatarURL(t, db, "U_EDGE"); got != img.URL+"/stored" {
+		t.Errorf("avatar_url = %q; want the stored one kept", got)
+	}
+}
+
 // Nothing to store when users.info fails or has no image. The avatar
 // cache is nil: any Preload with a URL would panic.
 func TestBackfillAvatar_NoImageOrErrorWritesNothing(t *testing.T) {
@@ -200,7 +227,9 @@ func TestRequestAvatar_OncePerUserPerSession(t *testing.T) {
 func TestRequestAvatar_DoesNotBlockTheCaller(t *testing.T) {
 	const requests = userResolverConcurrency * 4
 	release := make(chan struct{})
+	arrived := make(chan struct{}, requests)
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		arrived <- struct{}{}
 		<-release
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"ok":true,"user":{"id":"U1","name":"n","team_id":"T1","profile":{}}}`))
@@ -219,4 +248,10 @@ func TestRequestAvatar_DoesNotBlockTheCaller(t *testing.T) {
 	// hangs here, and the goroutine dump names it.
 	<-returned
 	close(release)
+	// Drain: backfillAvatar reads SQLite before it calls users.info, so
+	// once every request has reached the server no goroutine touches the
+	// DB again, and none can race t.TempDir's RemoveAll.
+	for i := 0; i < requests; i++ {
+		<-arrived
+	}
 }
