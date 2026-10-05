@@ -175,6 +175,9 @@ var reduceIO reducerFunc = func(a *App, msg tea.Msg) (tea.Cmd, bool) {
 		if m.Err != nil {
 			// Failure preserves the source caption + attachments so
 			// the user can retry; only the in-flight flag is cleared.
+			if a.threadCloseAfterUpload {
+				a.CloseThread()
+			}
 			return a.uploadToastCmd(
 				"Upload failed: "+truncateReason(m.Err.Error(), 40),
 				3*time.Second,
@@ -186,6 +189,11 @@ var reduceIO reducerFunc = func(a *App, msg tea.Msg) (tea.Cmd, bool) {
 		}
 		if threadUploading {
 			a.threadCompose.Reset()
+		}
+		// After the reset, so a sent thread caption isn't stored as a
+		// draft for the deleted thread.
+		if a.threadCloseAfterUpload {
+			a.CloseThread()
 		}
 		return a.uploadToastCmd("Sent", 2*time.Second), true
 

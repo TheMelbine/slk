@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/gammons/slk/internal/core"
+	"github.com/gammons/slk/internal/ui/messages"
 	"github.com/gammons/slk/internal/ui/sidebar"
 	"github.com/gammons/slk/internal/ui/wintree"
 )
@@ -192,5 +193,43 @@ func TestDraftSafety_SendTargetsCaptureChannel(t *testing.T) {
 	a.Update(ChannelSelectedMsg{ID: "C1", Name: "alpha", Type: "channel"})
 	if got := a.compose.Value(); got != "" {
 		t.Errorf("cleared draft resurrected after round trip: got %q, want empty", got)
+	}
+}
+
+// TestDraftSafety_ParentDeletedDuringUploadClosesThreadAfter pins that
+// a WS delete of the open thread's parent, landing while an upload is
+// in flight, still closes the thread once the upload ends. CloseThread
+// refuses during an upload, and the delete event is not redelivered.
+func TestDraftSafety_ParentDeletedDuringUploadClosesThreadAfter(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{"success", nil},
+		{"failure", errors.New("network")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a := newTestApp(t, withActiveTeam("T1"), withWindowSize(200, 60))
+			a.SetInitialChannel("C1", "alpha", nil)
+			a.openThreadPanel(messages.MessageItem{TS: "100.0"}, "C1", "100.0")
+
+			a.threadCompose.SetValue("caption")
+			a.threadCompose.AddAttachment(core.PendingAttachment{Filename: "t.png", Bytes: []byte("x")})
+			a.setUploaderForTest(func(_, _, _ string, _ []core.PendingAttachment) tea.Cmd { return nil })
+			a.submitWithAttachments(&a.threadCompose)
+			if !a.threadCompose.Uploading() {
+				t.Fatal("precondition: thread compose did not enter the uploading state")
+			}
+
+			a.Update(WSMessageDeletedMsg{ChannelID: "C1", TS: "100.0"})
+			if !a.threadVisible {
+				t.Fatal("thread closed mid-upload; the uploading caption would be detached")
+			}
+
+			a.Update(UploadResultMsg{Err: tc.err})
+			if a.threadVisible {
+				t.Error("thread of a deleted parent still open after the upload ended")
+			}
+		})
 	}
 }

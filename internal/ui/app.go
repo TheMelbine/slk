@@ -142,6 +142,10 @@ type App struct {
 	focusedPanel   Panel
 	sidebarVisible bool
 	threadVisible  bool
+	// threadCloseAfterUpload records a close that CloseThread refused
+	// while an upload was in flight (the open thread's parent was
+	// deleted). The UploadResultMsg arm runs it once the upload ends.
+	threadCloseAfterUpload bool
 	// stackFront is the content pane (PanelMessages or PanelThread)
 	// that last had focus. Recorded by Update, read by threadInFront.
 	stackFront Panel
@@ -2263,6 +2267,7 @@ func (a *App) CloseThread() {
 	if a.compose.Uploading() || a.threadCompose.Uploading() {
 		return
 	}
+	a.threadCloseAfterUpload = false
 	a.cancelEdit()
 	a.threadCompose.SetDraftContext("", "", "")
 	a.clearSelections()
