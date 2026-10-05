@@ -715,6 +715,10 @@ func run() error {
 	// workspace-scoped values (Client, UserNames, ...) into local
 	// vars BEFORE the `go func()` so they are not affected by a
 	// concurrent router.Set during the goroutine's lifetime.
+	// The rail's thread half, kept off the UI goroutine (see
+	// railThreadsCache). Its notifier is installed once p exists.
+	railThreads := newRailThreadsCache(railThreadsUnread(db))
+
 	wireCallbacks := func(router *workspaceRouter) {
 		channelReadStates := func() map[string]cache.ReadState {
 			wctx := router.Active()
@@ -735,7 +739,7 @@ func run() error {
 				log.Printf("Warning: UnreadChannels: %v", err)
 				return nil
 			}
-			return railUnreadWorkspaces(unread, railTeamIDs, router.ByID, railThreadsUnread(db))
+			return railUnreadWorkspaces(unread, railTeamIDs, router.ByID, railThreads.Unread)
 		}
 		app.SetUnreadService(core.NewUnreadService(channelReadStates, unreadWorkspaces))
 
@@ -1453,6 +1457,12 @@ func run() error {
 	// a serialized pass-through for non-sixel frames (no marker present)
 	// and the sixel paint site for marked frames.
 	p = tea.NewProgram(app, tea.WithOutput(terminalOutput))
+
+	// A changed thread-unread answer re-runs the rail refresh, which
+	// then reads the new answer from the cache.
+	railThreads.SetNotify(func(teamID string) {
+		p.Send(ui.ReadStateChangedMsg{WorkspaceID: teamID})
+	})
 
 	// Now that `p` exists, re-install the ImageContext with a real
 	// SendMsg callback so the prefetcher can dispatch ImageReadyMsg
