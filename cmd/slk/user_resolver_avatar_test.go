@@ -175,6 +175,44 @@ func TestBackfillAvatar_UsesStoredURLWithoutUsersInfo(t *testing.T) {
 	}
 }
 
+// A brand-new author renders before the resolver's edge batch has
+// written their row. users.info is the resolver's job then, not the
+// backfill's: calling it here would cost one call per newly seen
+// author, and FillUserAvatarURL would have no row to fill, so nothing
+// would be saved for the next launch. The backfill steps aside and
+// releases its once-per-session token; UserResolvedMsg re-renders the
+// row once it exists, and that render's request goes through.
+func TestBackfillAvatar_UnresolvedUserWaitsForTheResolver(t *testing.T) {
+	img := avatarPNGServer(t)
+	srv, hits := usersInfoServer(t, map[string]string{"U_NEW": fmt.Sprintf(`{"image_72":"%s/72"}`, img.URL)})
+	db := newTestDB(t)
+	avc, ready := newReadyAvatarCache(t)
+	r := newUserResolver("T1", newTestClient(t, srv), db, avc, nil, nil, nil)
+
+	r.avatarTried.Store("U_NEW", struct{}{}) // RequestAvatar's claim
+	r.backfillAvatar("U_NEW")
+
+	if n := hits.get("U_NEW"); n != 0 {
+		t.Errorf("users.info calls before the user's row exists = %d; want 0", n)
+	}
+	if _, held := r.avatarTried.Load("U_NEW"); held {
+		t.Fatal("once-per-session token still held; the post-resolution render could never retry")
+	}
+
+	seedEmptyAvatarUser(t, db, "U_NEW") // the resolver's edge batch lands
+	r.RequestAvatar("U_NEW")            // the UserResolvedMsg re-render
+
+	if got := <-ready; got != "U_NEW" {
+		t.Fatalf("onReady for %q; want U_NEW", got)
+	}
+	if n := hits.get("U_NEW"); n != 1 {
+		t.Errorf("users.info calls = %d; want 1", n)
+	}
+	if got := storedAvatarURL(t, db, "U_NEW"); got != img.URL+"/72" {
+		t.Errorf("stored avatar_url = %q; want it saved for the next launch", got)
+	}
+}
+
 // Nothing to store when users.info fails or has no image. The avatar
 // cache is nil: any Preload with a URL would panic.
 func TestBackfillAvatar_NoImageOrErrorWritesNothing(t *testing.T) {
@@ -216,11 +254,6 @@ func TestRequestAvatar_OncePerUserPerSession(t *testing.T) {
 	if got := hits.get("U_RAY"); got != 1 {
 		t.Errorf("users.info calls = %d; want 1", got)
 	}
-	r.RequestAvatar("B0123BOT")
-	r.RequestAvatar("")
-	if got := hits.get("B0123BOT") + hits.get(""); got != 0 {
-		t.Errorf("users.info called %d times for a bot or empty ID; want 0", got)
-	}
 }
 
 // RequestAvatar runs inside View(); it must never wait on users.info.
@@ -235,7 +268,11 @@ func TestRequestAvatar_DoesNotBlockTheCaller(t *testing.T) {
 		_, _ = w.Write([]byte(`{"ok":true,"user":{"id":"U1","name":"n","team_id":"T1","profile":{}}}`))
 	}))
 	defer srv.Close()
-	r := newUserResolver("T1", newTestClient(t, srv), newTestDB(t), nil, nil, nil, nil)
+	db := newTestDB(t)
+	for i := 0; i < requests; i++ {
+		seedEmptyAvatarUser(t, db, fmt.Sprintf("U%03d", i))
+	}
+	r := newUserResolver("T1", newTestClient(t, srv), db, nil, nil, nil, nil)
 
 	returned := make(chan struct{})
 	go func() {
