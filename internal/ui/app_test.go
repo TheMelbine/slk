@@ -4612,6 +4612,34 @@ func TestNotifyReadStateChanged_PopulatesWindowTitle(t *testing.T) {
 	}
 }
 
+// The workspace unread reader runs SQLite queries on the UI goroutine
+// (railUnreadWorkspaces in cmd/slk; ~400ms per call with 1000 subscribed
+// threads in a 2026-10-05 debug log), and notifyReadStateChanged runs on
+// every message for an unopened channel. One refresh, one read.
+func TestNotifyReadStateChanged_ReadsWorkspaceUnreadsOnce(t *testing.T) {
+	app := setupAppForTitleTest(t,
+		[]sidebar.ChannelItem{{ID: "C1", Name: "general", Type: "channel"}},
+		[]workspace.WorkspaceItem{
+			{ID: "T1", Name: "SWAP", Initials: "SW"},
+			{ID: "T2", Name: "Other", Initials: "OT"},
+		},
+		map[string]cache.ReadState{},
+		nil,
+	)
+	app.activeTeamID = "T1"
+	calls := 0
+	app.setWorkspaceUnreadReaderForTest(func() []string { calls++; return []string{"T2"} })
+
+	app.notifyReadStateChanged()
+
+	if calls != 1 {
+		t.Errorf("workspace unread reader calls = %d want 1", calls)
+	}
+	if got, want := app.windowTitle, "slk SW +1"; got != want {
+		t.Errorf("windowTitle = %q want %q", got, want)
+	}
+}
+
 func TestNotifyReadStateChanged_PreBootstrap(t *testing.T) {
 	app := NewApp()
 	// activeTeamID intentionally left blank
