@@ -2090,11 +2090,17 @@ func (a *App) applyThreadBreadcrumb(channelID, channelType string) {
 // by openThreadForSelectedMessage (parent taken from the pane buffer)
 // and openThreadForPermalink (parent reconstructed from cache/stub).
 func (a *App) openThreadPanel(parent messages.MessageItem, channelID, threadTS string) tea.Cmd {
+	if a.compose.Uploading() || a.threadCompose.Uploading() {
+		return a.uploadToastCmd("Upload in progress", 2*time.Second)
+	}
+	a.cancelEdit()
 	a.threadVisible = true
 	a.statusbar.SetInThread(true)
 	a.focusedPanel = PanelThread
 	a.threadPanel.SetThread(parent, nil, channelID, threadTS)
 	a.threadCompose.SetChannel(a.threadComposeChannelName(channelID))
+	a.threadCompose.SetActiveChannel(channelID)
+	a.threadCompose.SetDraftContext(a.activeTeamID, channelID, threadTS)
 	a.applyThreadBreadcrumb(channelID, "")
 	// A fresh thread must not inherit the previous thread's
 	// "also send to channel" toggle.
@@ -2254,6 +2260,11 @@ func (a *App) ToggleThread() {
 }
 
 func (a *App) CloseThread() {
+	if a.compose.Uploading() || a.threadCompose.Uploading() {
+		return
+	}
+	a.cancelEdit()
+	a.threadCompose.SetDraftContext("", "", "")
 	a.clearSelections()
 	a.threadVisible = false
 	a.statusbar.SetInThread(false)
@@ -2286,6 +2297,9 @@ func (a *App) CloseThread() {
 // hammering the Slack API and clobbering an in-progress read on every j/k
 // press or list reload).
 func (a *App) openSelectedThreadCmd(debounce bool) tea.Cmd {
+	if a.compose.Uploading() || a.threadCompose.Uploading() {
+		return a.uploadToastCmd("Upload in progress", 2*time.Second)
+	}
 	sum, ok := a.threadsView.SelectedSummary()
 	if !ok {
 		return nil
@@ -2293,6 +2307,7 @@ func (a *App) openSelectedThreadCmd(debounce bool) tea.Cmd {
 	if sum.ChannelID == a.lastOpenedChannelID && sum.ThreadTS == a.lastOpenedThreadTS {
 		return nil
 	}
+	a.cancelEdit()
 	a.lastOpenedChannelID = sum.ChannelID
 	a.lastOpenedThreadTS = sum.ThreadTS
 	a.threadVisible = true
@@ -2306,6 +2321,8 @@ func (a *App) openSelectedThreadCmd(debounce bool) tea.Cmd {
 	}
 	a.threadPanel.SetThread(parent, nil, sum.ChannelID, sum.ThreadTS)
 	a.threadCompose.SetChannel(a.threadComposeChannelName(sum.ChannelID))
+	a.threadCompose.SetActiveChannel(sum.ChannelID)
+	a.threadCompose.SetDraftContext(a.activeTeamID, sum.ChannelID, sum.ThreadTS)
 	a.applyThreadBreadcrumb(sum.ChannelID, sum.ChannelType)
 	// A fresh thread must not inherit the previous thread's
 	// "also send to channel" toggle.
@@ -3183,6 +3200,9 @@ func (a *App) SetInitialChannel(channelID, channelName string, msgs []messages.M
 	a.messagepane.SetChannel(channelName, "")
 	a.messagepane.SetMessages(msgs)
 	a.compose.SetChannel(channelName)
+	a.compose.SetActiveChannel(channelID)
+	a.compose.SetDraftContext(a.activeTeamID, channelID, "")
+	a.threadCompose.SetActiveChannel(channelID)
 	a.statusbar.SetChannel(channelName)
 }
 
@@ -3646,6 +3666,9 @@ const maxAttachmentSize = 10 * 1024 * 1024 // 10 MB cap
 // dispatch, the compose's uploading flag is set so the UI can show
 // progress; the actual UploadResultMsg arm in Update clears it.
 func (a *App) submitWithAttachments(c *compose.Model) tea.Cmd {
+	if a.compose.Uploading() || a.threadCompose.Uploading() {
+		return a.uploadToastCmd("Upload in progress", 2*time.Second)
+	}
 	if a.editing.IsActive() {
 		return a.uploadToastCmd("Cannot attach files to an edit (send a new message)", 3*time.Second)
 	}
