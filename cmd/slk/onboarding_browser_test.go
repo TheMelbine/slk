@@ -10,6 +10,7 @@ import (
 
 	"github.com/gammons/slk/internal/config"
 	slackclient "github.com/gammons/slk/internal/slack"
+	"github.com/gammons/slk/internal/slackdesktop"
 )
 
 // Shapes of "Copy as cURL" as Chrome and Firefox produce them, trimmed to what
@@ -70,6 +71,8 @@ func TestParseBrowserSession(t *testing.T) {
 		{"piped: token, then the cookie on its own line", "xoxc-1-2\nxoxd-Q%2F\n", "xoxc-1-2", "xoxd-Q%2F"},
 		{"piped, CRLF", "xoxc-1-2\r\n  xoxd-Q%2F\r\n", "xoxc-1-2", "xoxd-Q%2F"},
 		{"xoxd inside other text is not a bare cookie", "see xoxd-Q in the docs\n", "", ""},
+		{"xoxd followed by other text is not a bare cookie", "xoxd-Q is my cookie\n", "", ""},
+		{"bare cookie with its trailing semicolon", "xoxd-Q%2F;\n", "", "xoxd-Q%2F"},
 		{"cookie first in the header", `-H 'cookie: d=xoxd-A1; b=2' token=xoxc-1-2`, "xoxc-1-2", "xoxd-A1"},
 		{"bare token", "xoxc-1-2-3\n", "xoxc-1-2-3", ""},
 		{"bare cookie", "  xoxd-Q%2F\n", "", "xoxd-Q%2F"},
@@ -434,5 +437,29 @@ func TestSaveWorkspaceLeavesUnloadableConfigAlone(t *testing.T) {
 	}
 	if _, err := store.Load("T0123ABCD"); err != nil {
 		t.Errorf("token not saved: %v", err)
+	}
+}
+
+// Adding another workspace through the desktop flow must not replace a
+// browser session as a side effect: its row is listed, not pre-selected.
+func TestDesktopChoicesLeavesBrowserSessionsUnselected(t *testing.T) {
+	ws := []slackdesktop.Workspace{
+		{TeamID: "T1", Name: "Acme", Domain: "acme"},
+		{TeamID: "T2", Name: "Other", Domain: "other"},
+		{TeamID: "T3", Name: "Third", Domain: "third"},
+	}
+	saved := []slackclient.Token{
+		{TeamID: "T1", Source: slackclient.TokenSourceBrowser},
+		{TeamID: "T2"}, // from the desktop app: refreshed as before
+	}
+	choices, chosen := desktopChoices(ws, saved)
+	if len(choices) != 3 {
+		t.Fatalf("%d rows, want every workspace listed", len(choices))
+	}
+	if strings.Join(chosen, ",") != "T2,T3" {
+		t.Errorf("pre-selected %v, want T2 and T3 only", chosen)
+	}
+	if !strings.Contains(choices[0].label, "browser session") || strings.Contains(choices[1].label, "browser session") {
+		t.Errorf("labels = %q / %q, want only the browser one marked", choices[0].label, choices[1].label)
 	}
 }

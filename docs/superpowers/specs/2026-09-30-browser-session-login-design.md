@@ -49,7 +49,8 @@ A browser-session token is saved with `source = "browser"` and `remintTokens`
 skips it: the desktop app can hold the same workspace under another account,
 and re-minting would replace the chosen identity with that one. So it lasts as
 long as the browser session; `slk --add-workspace` (the desktop flow) saves a
-token without the mark and re-minting resumes. Without a desktop app,
+token without the mark and re-minting resumes; its picker lists such a team
+without pre-selecting it, so that is a deliberate choice. Without a desktop app,
 `remintTokens` already kept the cached token. The success message says to run the command again when
 Slack signs it out.
 
@@ -75,6 +76,8 @@ Slack signs it out.
   mint, no save) while a desktop one beside it is refreshed.
 - Piped input: a token then the cookie on its own line are both found in one
   read.
+- `desktopChoices`: a team held as a browser session is listed, labelled and
+  not pre-selected; the others are pre-selected as before.
 - `TestConnect_DiscoversStandardWorkspaceAPIBaseURL` also checks `TeamName`
   and `TeamSubdomain`.
 

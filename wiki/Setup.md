@@ -70,7 +70,9 @@ other workspace.
 Such a token is not re-minted on launch: it lasts as long as the browser
 session. That holds even if the desktop app is installed later, since it may
 be signed in to the same workspace as someone else; to go back to the desktop
-session, run `slk --add-workspace` and select the workspace. When Slack signs it out,
+session, run `slk --add-workspace` and tick the workspace: it is listed as a
+browser session and left unticked, so that adding another workspace does not
+replace it by accident. When Slack signs it out,
 run `slk --add-workspace --browser` again: it refreshes the token and leaves
 your `config.toml` as it is.
 

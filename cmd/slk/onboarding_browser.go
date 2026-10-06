@@ -27,8 +27,9 @@ import (
 // user pastes that (the bash, cmd or PowerShell form); a bare xoxc token
 // followed by the d cookie also works.
 //
-// Nothing re-mints such a token: startup keeps the cached one when it cannot
-// read a desktop cookie (see remintTokens), so it lasts as long as the
+// Such a token is saved with Source = TokenSourceBrowser and remintTokens
+// skips it, even when a desktop cookie is readable: the desktop app may hold
+// the same workspace under another account. So it lasts as long as the
 // browser session it came from.
 
 var (
@@ -45,7 +46,7 @@ var (
 	psCookiePattern = regexp.MustCompile(`Cookie\(\s*"d"\s*,\s*"(xoxd-[^"]+)"`)
 	// A value on a line of its own, without the "d=" prefix: pasted at the
 	// second prompt, or piped on the line after the token.
-	bareCookiePattern = regexp.MustCompile(`(?m)^[ \t]*(xoxd-[^;\s"'\\]+)[ \t]*\r?$`)
+	bareCookiePattern = regexp.MustCompile(`(?m)^[ \t]*(xoxd-[^;\s"'\\]+);?[ \t]*\r?$`)
 )
 
 const browserSessionSteps = `No Slack desktop app needed: sign in from your browser instead.
@@ -288,7 +289,12 @@ func authBrowserSession(token, cookie string) (slackclient.Token, error) {
 // otherwise, or on a no, it returns the desktop error unchanged. ask and
 // browser are injected for tests.
 func offerBrowserFallback(interactive bool, ask func() bool, browser func() error, desktopErr error) error {
-	if !interactive || !ask() {
+	if !interactive {
+		// Nobody to ask, but say the other way exists: it also reads a pipe.
+		fmt.Println("  Without the desktop app: slk --add-workspace --browser")
+		return desktopErr
+	}
+	if !ask() {
 		return desktopErr
 	}
 	return browser()

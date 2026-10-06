@@ -66,14 +66,13 @@ func addWorkspace(forceBrowser bool) error {
 		return offerBrowserFallback(term.IsTerminal(int(os.Stdin.Fd())), askBrowserFallback, browser, err)
 	}
 
-	// Multi-select (all pre-selected).
+	// Multi-select (all pre-selected, but for the teams signed in from a
+	// browser session: see desktopChoices).
+	saved, _ := tokenStore.List()
+	choices, chosen := desktopChoices(workspaces, saved)
 	var opts []huh.Option[string]
-	for _, w := range workspaces {
-		opts = append(opts, huh.NewOption(fmt.Sprintf("%s  (%s.slack.com)", w.Name, w.Domain), w.TeamID))
-	}
-	chosen := make([]string, 0, len(workspaces))
-	for _, w := range workspaces {
-		chosen = append(chosen, w.TeamID)
+	for _, c := range choices {
+		opts = append(opts, huh.NewOption(c.label, c.teamID))
 	}
 	// huh sizes the MultiSelect option viewport to (Height - title/description
 	// lines); when Height is unset the viewport collapses to a row or two and
