@@ -329,8 +329,9 @@ func TestDrainInput(t *testing.T) {
 		}
 		f := &fakeTerminal{arrivals: arrivals}
 		drainInput(f.pending, f.flush, f.sleep)
-		if f.slept > drainMax {
-			t.Errorf("slept %v, want at most %v", f.slept, drainMax)
+		// A literal, not drainMax: the bound itself is what is pinned.
+		if limit := 5 * time.Second; f.slept > limit {
+			t.Errorf("slept %v, want at most %v", f.slept, limit)
 		}
 	})
 }

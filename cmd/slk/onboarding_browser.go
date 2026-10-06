@@ -193,9 +193,12 @@ func readSecret(in *os.File, prompt string) (string, error) {
 	}
 	defer func() { _ = term.Restore(fd, old) }()
 
-	// A signal while waiting for the paste skips the deferred Restore: put
-	// the terminal back before going. (Ctrl-C itself arrives as a byte in
-	// raw mode; SIGINT here is a kill -INT.)
+	// A signal while waiting for the paste, or during the drain, skips the
+	// deferred Restore: put the terminal back before going, after dropping
+	// what is queued, so a late chunk of the paste is not left behind. One
+	// flush, not drainInput: a kill must not wait for a quiet window.
+	// (Ctrl-C itself arrives as a byte in raw mode; SIGINT here is a
+	// kill -INT.)
 	sig := make(chan os.Signal, 1)
 	done := make(chan struct{})
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
@@ -206,6 +209,7 @@ func readSecret(in *os.File, prompt string) (string, error) {
 	go func() {
 		select {
 		case <-sig:
+			_ = flushInput(fd)
 			_ = term.Restore(fd, old)
 			os.Exit(1)
 		case <-done:

@@ -52,7 +52,25 @@ Slack signs it out.
 
 ## Tests
 
-`parseBrowserSession` (Chrome and Firefox shapes, `d-s` not taken for `d`, bare
-token, bare cookie), `pasteComplete`, and `readPaste` (multi-line continuation,
-a 10 KB line, Ctrl-C, Ctrl-D, EOF). `TestConnect_DiscoversStandardWorkspaceAPIBaseURL`
-now also checks `TeamName` and `TeamSubdomain`.
+- `parseBrowserSession`: the Chrome bash, cmd and PowerShell shapes, Firefox,
+  a PowerShell form with the cookie in its headers, `d-s`, `xd` and `x-d` not
+  taken for `d`, a bare token, a bare cookie encoded or decoded.
+- `pasteComplete` and `readPaste`: each continuation, the `$session` and
+  `-Headers @{ ... }` rules, every shape read whole and not past its end, a
+  10 KB line, Ctrl-C, Ctrl-D, EOF.
+- `drainInput`, against a fake terminal: nothing pending, a tail arriving
+  late, input that never stops (bounded at 5 s).
+- `browserLogin.run`, with its read, auth and save injected: no token (Slack
+  never called), a bare token then the cookie, no cookie, a full cURL, Slack
+  refusing.
+- `offerBrowserFallback`: not a terminal (never asks, returns the desktop
+  error itself), declined, accepted.
+- `addWorkspaceArgs`: `--browser` in either order, alone, a misspelt argument.
+- `saveWorkspace`: the same team twice (one block, the config loads, the token
+  is refreshed), and a `config.toml` that already fails to load (left alone).
+- `TestConnect_DiscoversStandardWorkspaceAPIBaseURL` also checks `TeamName`
+  and `TeamSubdomain`.
+
+Not covered by `go test`, since they need a pty: the flush itself, and the
+flush on a signal. Both were checked by driving the binary through a pty with
+a second reader on the terminal after slk exits.
