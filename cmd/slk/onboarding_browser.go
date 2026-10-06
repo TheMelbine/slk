@@ -43,8 +43,9 @@ var (
 	// The d cookie in the PowerShell form:
 	// New-Object System.Net.Cookie("d", "xoxd-...", "/", ".slack.com").
 	psCookiePattern = regexp.MustCompile(`Cookie\(\s*"d"\s*,\s*"(xoxd-[^"]+)"`)
-	// A value pasted on its own, without the "d=" prefix.
-	bareCookiePattern = regexp.MustCompile(`^xoxd-[^;\s"'\\]+$`)
+	// A value on a line of its own, without the "d=" prefix: pasted at the
+	// second prompt, or piped on the line after the token.
+	bareCookiePattern = regexp.MustCompile(`(?m)^[ \t]*(xoxd-[^;\s"'\\]+)[ \t]*\r?$`)
 )
 
 const browserSessionSteps = `No Slack desktop app needed: sign in from your browser instead.
@@ -70,8 +71,8 @@ func parseBrowserSession(paste string) (token, cookie string) {
 		cookie = m[1]
 	} else if m := psCookiePattern.FindStringSubmatch(paste); m != nil {
 		cookie = m[1]
-	} else if trimmed := strings.TrimSpace(paste); bareCookiePattern.MatchString(trimmed) {
-		cookie = trimmed
+	} else if m := bareCookiePattern.FindStringSubmatch(paste); m != nil {
+		cookie = m[1]
 	}
 	return token, encodeCookie(cookie)
 }
@@ -178,7 +179,8 @@ func drainInput(pending func() (int, error), flush func() error, sleep func(time
 }
 
 // readSecret prints prompt and reads a paste without echoing it. From a pipe
-// it reads everything.
+// it reads everything at the first prompt, so a piped token and cookie come
+// together: parseBrowserSession finds the cookie on its own line.
 func readSecret(in *os.File, prompt string) (string, error) {
 	fmt.Print(prompt)
 	defer fmt.Println()
@@ -259,6 +261,9 @@ func (b browserLogin) run(st onboardingStyles) error {
 		fmt.Println(st.errorText.Render(fmt.Sprintf("  Authentication failed: %v", err)))
 		return fmt.Errorf("authentication failed: %w", err)
 	}
+	// Marked so that startup re-minting never swaps it for the desktop app's
+	// session, which may belong to another account of the same workspace.
+	tok.Source = slackclient.TokenSourceBrowser
 	return b.save(tok)
 }
 

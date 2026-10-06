@@ -45,9 +45,12 @@ getslk.sh/install still documents it (issue #141).
 
 ## Limits
 
-Startup re-minting needs the desktop cookie; `remintTokens` already keeps the
-cached token when it cannot read it, so a browser-session token lasts as long
-as the browser session. The success message says to run the command again when
+A browser-session token is saved with `source = "browser"` and `remintTokens`
+skips it: the desktop app can hold the same workspace under another account,
+and re-minting would replace the chosen identity with that one. So it lasts as
+long as the browser session; `slk --add-workspace` (the desktop flow) saves a
+token without the mark and re-minting resumes. Without a desktop app,
+`remintTokens` already kept the cached token. The success message says to run the command again when
 Slack signs it out.
 
 ## Tests
@@ -68,6 +71,10 @@ Slack signs it out.
 - `addWorkspaceArgs`: `--browser` in either order, alone, a misspelt argument.
 - `saveWorkspace`: the same team twice (one block, the config loads, the token
   is refreshed), and a `config.toml` that already fails to load (left alone).
+- `remintTokens`: a browser-session token is left alone (no desktop token, no
+  mint, no save) while a desktop one beside it is refreshed.
+- Piped input: a token then the cookie on its own line are both found in one
+  read.
 - `TestConnect_DiscoversStandardWorkspaceAPIBaseURL` also checks `TeamName`
   and `TeamSubdomain`.
 

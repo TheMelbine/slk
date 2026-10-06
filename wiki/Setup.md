@@ -67,8 +67,10 @@ bare `xoxc-` token also works; slk then asks for the `d` cookie (DevTools >
 Application > Cookies). The pair is checked with `auth.test` and saved like any
 other workspace.
 
-Such a token is not re-minted on launch, since there is no desktop cookie to
-mint from: it lasts as long as the browser session. When Slack signs it out,
+Such a token is not re-minted on launch: it lasts as long as the browser
+session. That holds even if the desktop app is installed later, since it may
+be signed in to the same workspace as someone else; to go back to the desktop
+session, run `slk --add-workspace` and select the workspace. When Slack signs it out,
 run `slk --add-workspace --browser` again: it refreshes the token and leaves
 your `config.toml` as it is.
 

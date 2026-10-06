@@ -67,6 +67,9 @@ func TestParseBrowserSession(t *testing.T) {
 		{"a cookie named x-d before d", `-b 'x-d=xoxd-WRONG; d=xoxd-RIGHT' token=xoxc-1`, "xoxc-1", "xoxd-RIGHT"},
 		{"bare cookie, decoded", "xoxd-AbC/def+Ghi==\n", "", "xoxd-AbC%2Fdef%2BGhi%3D%3D"},
 		{"bare cookie, encoded, kept as is", "xoxd-AbC%2Fdef\n", "", "xoxd-AbC%2Fdef"},
+		{"piped: token, then the cookie on its own line", "xoxc-1-2\nxoxd-Q%2F\n", "xoxc-1-2", "xoxd-Q%2F"},
+		{"piped, CRLF", "xoxc-1-2\r\n  xoxd-Q%2F\r\n", "xoxc-1-2", "xoxd-Q%2F"},
+		{"xoxd inside other text is not a bare cookie", "see xoxd-Q in the docs\n", "", ""},
 		{"cookie first in the header", `-H 'cookie: d=xoxd-A1; b=2' token=xoxc-1-2`, "xoxc-1-2", "xoxd-A1"},
 		{"bare token", "xoxc-1-2-3\n", "xoxc-1-2-3", ""},
 		{"bare cookie", "  xoxd-Q%2F\n", "", "xoxd-Q%2F"},
@@ -223,6 +226,18 @@ func TestBrowserLoginRun(t *testing.T) {
 		}
 	})
 
+	// From a pipe the first read returns everything: both values must be
+	// found in it, the second prompt would only see EOF.
+	t.Run("piped token and cookie: one read", func(t *testing.T) {
+		f := &fakeLogin{pastes: []string{"xoxc-1-2\nxoxd-Q%2F\n"}}
+		if err := f.login().run(st); err != nil {
+			t.Fatalf("run: %v", err)
+		}
+		if f.reads != 1 || f.saved == nil || f.saved.Cookie != "xoxd-Q%2F" {
+			t.Errorf("reads=%d saved=%+v, want both values from one read", f.reads, f.saved)
+		}
+	})
+
 	t.Run("no cookie on the second read", func(t *testing.T) {
 		f := &fakeLogin{pastes: []string{"xoxc-1-2\n", "not a cookie\n"}}
 		if err := f.login().run(st); !errors.Is(err, errNoCookie) {
@@ -240,6 +255,9 @@ func TestBrowserLoginRun(t *testing.T) {
 		}
 		if f.reads != 1 || f.saved == nil || f.saved.TeamID != "T1" {
 			t.Errorf("reads=%d saved=%+v, want one read and the team saved", f.reads, f.saved)
+		}
+		if f.saved != nil && f.saved.Source != slackclient.TokenSourceBrowser {
+			t.Errorf("Source = %q, want it marked as a browser session", f.saved.Source)
 		}
 	})
 
