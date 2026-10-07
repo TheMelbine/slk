@@ -2,14 +2,17 @@ package ui
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/gammons/slk/internal/cache"
 	"github.com/gammons/slk/internal/core"
 	"github.com/gammons/slk/internal/ui/messages"
 	"github.com/gammons/slk/internal/ui/sidebar"
 	"github.com/gammons/slk/internal/ui/wintree"
+	"github.com/gammons/slk/internal/ui/workspace"
 )
 
 // TestDraftSafety_ChannelPickerSwitchKeepsDraft pins that an open
@@ -231,5 +234,211 @@ func TestDraftSafety_ParentDeletedDuringUploadClosesThreadAfter(t *testing.T) {
 				t.Error("thread of a deleted parent still open after the upload ended")
 			}
 		})
+	}
+}
+
+// uploadGuardApp builds an App with workspaces T1/T2, channel C1, a
+// thread open on parent 100.0, and the main composer mid-upload. The
+// thread composer holds an unrelated draft. It returns the number of
+// uploader calls and the team IDs the workspace switcher was asked for.
+func uploadGuardApp(t *testing.T) (a *App, uploads *int, switched *[]string) {
+	t.Helper()
+	a = newTestApp(t,
+		withActiveTeam("T1"),
+		withWindowSize(200, 60),
+		withWorkspaces(
+			workspace.WorkspaceItem{ID: "T1", Name: "Acme", Initials: "AC"},
+			workspace.WorkspaceItem{ID: "T2", Name: "Beta", Initials: "BE"},
+		),
+	)
+	a.SetInitialChannel("C1", "alpha", []messages.MessageItem{
+		{TS: "100.0", Text: "parent"},
+		{TS: "200.0", Text: "other"},
+	})
+	_ = a.View() // populate layout bands for the rail click
+
+	uploads, switched = new(int), new([]string)
+	a.setUploaderForTest(func(_, _, _ string, _ []core.PendingAttachment) tea.Cmd {
+		*uploads++
+		return nil
+	})
+	a.setWorkspaceSwitcherForTest(func(teamID string) tea.Msg {
+		*switched = append(*switched, teamID)
+		return nil
+	})
+
+	a.openThreadPanel(messages.MessageItem{TS: "100.0"}, "C1", "100.0")
+	a.threadCompose.SetValue("thread keep")
+
+	a.compose.SetValue("main caption")
+	a.compose.AddAttachment(core.PendingAttachment{Filename: "shot.png", Bytes: []byte("x")})
+	a.submitWithAttachments(&a.compose)
+	if !a.compose.Uploading() || *uploads != 1 {
+		t.Fatalf("precondition: main compose not uploading (uploads=%d)", *uploads)
+	}
+	return a, uploads, switched
+}
+
+// TestDraftSafety_UploadInFlightRefusesEntryPoints drives every entry
+// point that could move the composer, the thread or the workspace
+// while an upload is in flight, and pins that each one only toasts.
+func TestDraftSafety_UploadInFlightRefusesEntryPoints(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		setup func(a *App)
+		msg   tea.Msg
+		// silent rows reach CloseThread, which refuses without a toast.
+		silent bool
+	}{
+		{
+			name:  "insert-mode printable key",
+			setup: func(a *App) { a.SetMode(ModeInsert); a.focusedPanel = PanelThread },
+			msg:   keyPress('x'),
+		},
+		{
+			name:  "insert-mode enter",
+			setup: func(a *App) { a.SetMode(ModeInsert); a.focusedPanel = PanelThread },
+			msg:   keyCode(tea.KeyEnter),
+		},
+		{
+			name:  "paste",
+			setup: func(a *App) { a.SetMode(ModeInsert); a.focusedPanel = PanelThread },
+			msg:   tea.PasteMsg{Content: "pasted"},
+		},
+		{
+			name: "digit workspace key",
+			msg:  keyPress('2'),
+		},
+		{
+			name: "workspace finder enter",
+			setup: func(a *App) {
+				a.workspaceFinder.Open()
+				a.SetMode(ModeWorkspaceFinder)
+				a.Update(keyCode(tea.KeyDown))
+			},
+			msg: keyCode(tea.KeyEnter),
+		},
+		{
+			name: "workspace rail click",
+			msg:  tea.MouseClickMsg{X: 0, Y: 3, Button: tea.MouseLeft},
+		},
+		{
+			// A switch already dispatched before the upload began.
+			name: "workspace switch result",
+			msg:  WorkspaceSwitchedMsg{TeamID: "T2", TeamName: "Beta"},
+		},
+		{
+			name: "open thread from a message",
+			setup: func(a *App) {
+				a.focusedPanel = PanelMessages
+				a.messagepane.SelectByTS("200.0")
+			},
+			msg: keyCode(tea.KeyEnter),
+		},
+		{
+			name: "open thread from the threads view",
+			setup: func(a *App) {
+				a.threadsView.SetSummaries([]cache.ThreadSummary{{ChannelID: "C1", ThreadTS: "300.0"}})
+				a.view = ViewThreads
+				a.focusedPanel = PanelMessages
+			},
+			msg: keyCode(tea.KeyEnter),
+		},
+		{
+			name:   "esc on the open thread",
+			setup:  func(a *App) { a.focusedPanel = PanelThread },
+			msg:    keyCode(tea.KeyEscape),
+			silent: true,
+		},
+		{
+			name:   "q on the open thread",
+			setup:  func(a *App) { a.focusedPanel = PanelThread },
+			msg:    keyPress('q'),
+			silent: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a, uploads, switched := uploadGuardApp(t)
+			if tc.setup != nil {
+				tc.setup(a)
+			}
+
+			_, cmd := a.Update(tc.msg)
+			if !tc.silent {
+				firstBatchCmd(t, cmd)
+				if got := statusbarText(a); !strings.Contains(got, "Upload in progress") {
+					t.Errorf("status bar = %q, want it to contain %q", got, "Upload in progress")
+				}
+			}
+
+			if got := a.compose.Value(); got != "main caption" {
+				t.Errorf("main caption = %q, want %q", got, "main caption")
+			}
+			if got := len(a.compose.Attachments()); got != 1 {
+				t.Errorf("main attachments = %d, want 1", got)
+			}
+			if got := a.threadCompose.Value(); got != "thread keep" {
+				t.Errorf("thread draft = %q, want %q", got, "thread keep")
+			}
+			if *uploads != 1 {
+				t.Errorf("uploader calls = %d, want 1", *uploads)
+			}
+			if !a.threadVisible || a.threadPanel.ThreadTS() != "100.0" {
+				t.Errorf("thread = (visible %v, ts %q), want (true, %q)", a.threadVisible, a.threadPanel.ThreadTS(), "100.0")
+			}
+			if len(*switched) != 0 || a.activeTeamID != "T1" {
+				t.Errorf("workspace switched to %v (active %q), want none", *switched, a.activeTeamID)
+			}
+		})
+	}
+}
+
+// TestDraftSafety_SubmitWithAttachmentsRefusesDuringUpload pins the
+// guard inside submitWithAttachments directly. Its callers sit behind
+// handleInsertMode's own upload guard, so no key can reach it.
+func TestDraftSafety_SubmitWithAttachmentsRefusesDuringUpload(t *testing.T) {
+	a, uploads, _ := uploadGuardApp(t)
+	a.threadCompose.AddAttachment(core.PendingAttachment{Filename: "t.png", Bytes: []byte("y")})
+
+	firstBatchCmd(t, a.submitWithAttachments(&a.threadCompose))
+	if *uploads != 1 {
+		t.Errorf("uploader calls = %d, want 1", *uploads)
+	}
+	if a.threadCompose.Uploading() {
+		t.Error("thread compose started a second upload")
+	}
+}
+
+// TestDraftSafety_DeferredThreadCloseFiresOnce pins that the deferred
+// close of a deleted thread is cleared once it runs: a later upload in
+// another thread must leave that thread open.
+func TestDraftSafety_DeferredThreadCloseFiresOnce(t *testing.T) {
+	a := newTestApp(t, withActiveTeam("T1"), withWindowSize(200, 60))
+	a.SetInitialChannel("C1", "alpha", nil)
+	a.setUploaderForTest(func(_, _, _ string, _ []core.PendingAttachment) tea.Cmd { return nil })
+
+	upload := func() {
+		t.Helper()
+		a.threadCompose.SetValue("caption")
+		a.threadCompose.AddAttachment(core.PendingAttachment{Filename: "t.png", Bytes: []byte("x")})
+		a.submitWithAttachments(&a.threadCompose)
+		if !a.threadCompose.Uploading() {
+			t.Fatal("precondition: thread compose did not enter the uploading state")
+		}
+	}
+
+	a.openThreadPanel(messages.MessageItem{TS: "100.0"}, "C1", "100.0")
+	upload()
+	a.Update(WSMessageDeletedMsg{ChannelID: "C1", TS: "100.0"})
+	a.Update(UploadResultMsg{})
+	if a.threadVisible {
+		t.Fatal("precondition: deleted thread still open after its upload ended")
+	}
+
+	a.openThreadPanel(messages.MessageItem{TS: "200.0"}, "C1", "200.0")
+	upload()
+	a.Update(UploadResultMsg{})
+	if !a.threadVisible || a.threadPanel.ThreadTS() != "200.0" {
+		t.Errorf("thread = (visible %v, ts %q), want (true, %q): a stale deferred close fired", a.threadVisible, a.threadPanel.ThreadTS(), "200.0")
 	}
 }

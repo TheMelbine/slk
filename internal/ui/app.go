@@ -3671,6 +3671,8 @@ const maxAttachmentSize = 10 * 1024 * 1024 // 10 MB cap
 // dispatch, the compose's uploading flag is set so the UI can show
 // progress; the actual UploadResultMsg arm in Update clears it.
 func (a *App) submitWithAttachments(c *compose.Model) tea.Cmd {
+	// Second line of defence: both callers sit behind handleInsertMode's
+	// upload guard, so no key reaches this while an upload is in flight.
 	if a.compose.Uploading() || a.threadCompose.Uploading() {
 		return a.uploadToastCmd("Upload in progress", 2*time.Second)
 	}
