@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync"
 
 	slk "github.com/gammons/slk/internal/slack"
@@ -12,17 +11,18 @@ import (
 // MutedChannelsClient is the subset of slk.Client MuteStore needs.
 // Defined as an interface so tests can pass fakes.
 type MutedChannelsClient interface {
-	// GetMutedChannels returns the IDs of channels the authenticated
-	// user has muted. The data lives in the user's Slack prefs blob
-	// (the comma-separated "muted_channels" pref); it is not exposed
+	// GetChannelNotificationPrefs returns the per-channel notification
+	// prefs (mute state, desktop level) of the authenticated user. The
+	// data lives in the user's Slack prefs blob; it is not exposed
 	// per-channel via conversations.list.
-	GetMutedChannels(ctx context.Context) ([]string, error)
+	GetChannelNotificationPrefs(ctx context.Context) (map[string]slk.ChannelNotifyPrefs, error)
 }
 
-// MuteStore is the per-workspace authoritative cache of which channels
-// the authenticated user has muted. Populated on bootstrap from the
-// users.prefs.get REST call and kept fresh by pref_change WebSocket
-// events (see ApplyPrefChange).
+// MuteStore is the per-workspace authoritative cache of the
+// authenticated user's per-channel notification prefs: which channels
+// are muted and which desktop level each one has. Populated on
+// bootstrap from the users.prefs.get REST call and kept fresh by
+// pref_change WebSocket events (see ApplyPrefChange).
 //
 // All public methods are safe for concurrent use.
 //
@@ -31,13 +31,13 @@ type MutedChannelsClient interface {
 type MuteStore struct {
 	mu    sync.RWMutex
 	ready bool
-	muted map[string]bool
+	prefs map[string]slk.ChannelNotifyPrefs
 }
 
 // NewMuteStore returns an empty store. Reports Ready()==false until
 // Bootstrap completes successfully.
 func NewMuteStore() *MuteStore {
-	return &MuteStore{muted: map[string]bool{}}
+	return &MuteStore{prefs: map[string]slk.ChannelNotifyPrefs{}}
 }
 
 // Ready reports whether the store has successfully bootstrapped at
@@ -50,23 +50,23 @@ func (s *MuteStore) Ready() bool {
 	return s.ready
 }
 
-// Bootstrap fetches the muted_channels pref and replaces any prior
+// Bootstrap fetches the notification prefs and replaces any prior
 // state atomically. Returns an error without mutating state if the
 // fetch fails.
 func (s *MuteStore) Bootstrap(ctx context.Context, client MutedChannelsClient) error {
-	ids, err := client.GetMutedChannels(ctx)
+	prefs, err := client.GetChannelNotificationPrefs(ctx)
 	if err != nil {
-		return fmt.Errorf("fetching muted channels: %w", err)
+		return fmt.Errorf("fetching notification prefs: %w", err)
 	}
-	next := make(map[string]bool, len(ids))
-	for _, id := range ids {
+	next := make(map[string]slk.ChannelNotifyPrefs, len(prefs))
+	for id, p := range prefs {
 		if id == "" {
 			continue
 		}
-		next[id] = true
+		next[id] = p
 	}
 	s.mu.Lock()
-	s.muted = next
+	s.prefs = next
 	s.ready = true
 	s.mu.Unlock()
 	return nil
@@ -84,7 +84,23 @@ func (s *MuteStore) IsMuted(channelID string) bool {
 	if !s.ready {
 		return false
 	}
-	return s.muted[channelID]
+	return s.prefs[channelID].Muted
+}
+
+// DesktopLevel returns the channel's desktop notification level as
+// Slack names it ("everything", "mentions_dms", "nothing"), or "" when
+// the user never customized the channel or the store is not ready. An
+// empty level means the caller's own defaults apply.
+func (s *MuteStore) DesktopLevel(channelID string) string {
+	if channelID == "" {
+		return ""
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if !s.ready {
+		return ""
+	}
+	return s.prefs[channelID].Desktop
 }
 
 // MutedChannels returns a snapshot of every channel ID currently
@@ -93,12 +109,14 @@ func (s *MuteStore) IsMuted(channelID string) bool {
 func (s *MuteStore) MutedChannels() []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	if !s.ready || len(s.muted) == 0 {
+	if !s.ready {
 		return nil
 	}
-	out := make([]string, 0, len(s.muted))
-	for id := range s.muted {
-		out = append(out, id)
+	var out []string
+	for id, p := range s.prefs {
+		if p.Muted {
+			out = append(out, id)
+		}
 	}
 	return out
 }
@@ -107,25 +125,26 @@ func (s *MuteStore) MutedChannels() []string {
 // acted on:
 //
 //   - all_notifications_prefs: Slack's current (per-channel) home for
-//     mute state. value is a JSON-encoded string with channels[id].muted
-//     keys; ParseMutedFromAllNotificationsPrefs decodes it.
+//     mute state and desktop levels. value is a JSON-encoded string
+//     with channels[id].muted and channels[id].desktop keys;
+//     ParseAllNotificationsPrefs decodes it.
 //   - muted_channels: legacy flat list, comma-separated. Kept for
 //     back-compat in case Slack still ships it on some workspaces.
 //
 // Slack ships the full updated payload on every change for both prefs,
 // so this is a wholesale replace, not an incremental delta.
 //
-// Returns true when the muted set actually changed, so callers can
-// decide whether to trigger a sidebar refresh.
+// Returns true when the prefs actually changed, so callers can decide
+// whether to trigger a sidebar refresh.
 func (s *MuteStore) ApplyPrefChange(name, value string) bool {
-	var next map[string]bool
+	var next map[string]slk.ChannelNotifyPrefs
 	switch name {
 	case "muted_channels":
-		next = parseMutedChannelsPref(value)
+		next = slk.MergeChannelNotificationPrefs(value, "")
 	case "all_notifications_prefs":
-		next = map[string]bool{}
-		for _, id := range slk.ParseMutedFromAllNotificationsPrefs(value) {
-			next[id] = true
+		next = slk.ParseAllNotificationsPrefs(value)
+		if next == nil {
+			next = map[string]slk.ChannelNotifyPrefs{}
 		}
 	default:
 		return false
@@ -135,36 +154,21 @@ func (s *MuteStore) ApplyPrefChange(name, value string) bool {
 	// Mark ready even on the first pref_change we see — the event
 	// carries the full authoritative list, so it's a valid bootstrap
 	// on its own.
-	changed := !s.ready || !sameMuteSet(s.muted, next)
-	s.muted = next
+	changed := !s.ready || !samePrefs(s.prefs, next)
+	s.prefs = next
 	s.ready = true
 	return changed
 }
 
-// parseMutedChannelsPref splits Slack's comma-separated muted_channels
-// pref into a set, trimming whitespace and dropping empty entries.
-func parseMutedChannelsPref(raw string) map[string]bool {
-	out := map[string]bool{}
-	if raw == "" {
-		return out
-	}
-	for _, part := range strings.Split(raw, ",") {
-		id := strings.TrimSpace(part)
-		if id == "" {
-			continue
-		}
-		out[id] = true
-	}
-	return out
-}
-
-// sameMuteSet reports whether a and b contain the same channel IDs.
-func sameMuteSet(a, b map[string]bool) bool {
+// samePrefs reports whether a and b hold the same prefs for the same
+// channel IDs.
+func samePrefs(a, b map[string]slk.ChannelNotifyPrefs) bool {
 	if len(a) != len(b) {
 		return false
 	}
-	for id := range a {
-		if !b[id] {
+	for id, p := range a {
+		q, ok := b[id]
+		if !ok || p != q {
 			return false
 		}
 	}

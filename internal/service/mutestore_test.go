@@ -5,18 +5,30 @@ import (
 	"errors"
 	"sort"
 	"testing"
+
+	slk "github.com/gammons/slk/internal/slack"
 )
 
 type fakeMutedClient struct {
-	ids []string
-	err error
+	ids   []string
+	prefs map[string]slk.ChannelNotifyPrefs
+	err   error
 }
 
-func (f *fakeMutedClient) GetMutedChannels(_ context.Context) ([]string, error) {
+func (f *fakeMutedClient) GetChannelNotificationPrefs(_ context.Context) (map[string]slk.ChannelNotifyPrefs, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
-	return f.ids, nil
+	out := map[string]slk.ChannelNotifyPrefs{}
+	for id, p := range f.prefs {
+		out[id] = p
+	}
+	for _, id := range f.ids {
+		p := out[id]
+		p.Muted = true
+		out[id] = p
+	}
+	return out, nil
 }
 
 func TestMuteStore_NotReadyByDefault(t *testing.T) {
@@ -219,5 +231,40 @@ func TestMuteStore_MutedChannelsSnapshot(t *testing.T) {
 		if got[i] != want[i] {
 			t.Errorf("MutedChannels[%d]=%q, want %q", i, got[i], want[i])
 		}
+	}
+}
+
+func TestMuteStore_DesktopLevel(t *testing.T) {
+	s := NewMuteStore()
+	if s.DesktopLevel("C1") != "" {
+		t.Errorf("not-ready store should report no level")
+	}
+	c := &fakeMutedClient{prefs: map[string]slk.ChannelNotifyPrefs{
+		"C1": {Desktop: "nothing"},
+		"C2": {Muted: true},
+	}}
+	if err := s.Bootstrap(context.Background(), c); err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	if got := s.DesktopLevel("C1"); got != "nothing" {
+		t.Errorf("DesktopLevel(C1)=%q, want nothing", got)
+	}
+	if got := s.DesktopLevel("C2"); got != "" {
+		t.Errorf("DesktopLevel(C2)=%q, want empty", got)
+	}
+	if !s.IsMuted("C2") || s.IsMuted("C1") {
+		t.Errorf("mute flags wrong: C1=%v C2=%v", s.IsMuted("C1"), s.IsMuted("C2"))
+	}
+
+	// A level-only change still counts as a change.
+	value := `{"channels":{"C1":{"desktop":"mentions_dms"},"C2":{"muted":true}}}`
+	if !s.ApplyPrefChange("all_notifications_prefs", value) {
+		t.Errorf("level change should report changed=true")
+	}
+	if got := s.DesktopLevel("C1"); got != "mentions_dms" {
+		t.Errorf("DesktopLevel(C1)=%q after pref_change, want mentions_dms", got)
+	}
+	if s.ApplyPrefChange("all_notifications_prefs", value) {
+		t.Errorf("same payload should report changed=false")
 	}
 }

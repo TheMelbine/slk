@@ -737,9 +737,15 @@ func TestBootMutedChannels_MergesBothPrefs(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			res := &bootstrap.Result{MutePrefsRaw: tc.muted, LegacyMutedRaw: tc.legacy}
-			got, err := bootMutedChannels{res}.GetMutedChannels(context.Background())
+			prefs, err := bootMutedChannels{res}.GetChannelNotificationPrefs(context.Background())
 			if err != nil {
-				t.Fatalf("GetMutedChannels: %v", err)
+				t.Fatalf("GetChannelNotificationPrefs: %v", err)
+			}
+			var got []string
+			for id, p := range prefs {
+				if p.Muted {
+					got = append(got, id)
+				}
 			}
 			sort.Strings(got)
 			if len(got) != len(tc.want) {

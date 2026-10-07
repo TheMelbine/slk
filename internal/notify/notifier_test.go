@@ -321,3 +321,56 @@ func TestShouldNotify_FollowedThread(t *testing.T) {
 		t.Error("reply in an unfollowed thread should not notify")
 	}
 }
+
+func TestShouldNotify_ChannelLevel(t *testing.T) {
+	base := NotifyContext{
+		CurrentUserID:   "U1",
+		ActiveChannelID: "C_OTHER",
+		IsActiveWS:      true,
+		OnMention:       true,
+		OnDM:            true,
+		OnKeyword:       []string{"deploy"},
+	}
+	mention := "hey <@U1> look"
+	plain := "nothing special"
+
+	nothing := base
+	nothing.ChannelLevel = LevelNothing
+	if ShouldNotify(nothing, "C1", "U2", mention, "channel") {
+		t.Error("level nothing: mention should not notify")
+	}
+	if ShouldNotify(nothing, "C1", "U2", "deploy now", "channel") {
+		t.Error("level nothing: keyword should not notify")
+	}
+
+	everything := base
+	everything.ChannelLevel = LevelEverything
+	if !ShouldNotify(everything, "C1", "U2", plain, "channel") {
+		t.Error("level everything: plain message should notify")
+	}
+	everything.ActiveChannelID = "C1"
+	if ShouldNotify(everything, "C1", "U2", plain, "channel") {
+		t.Error("level everything: the channel on screen should stay quiet")
+	}
+
+	mentions := base
+	mentions.ChannelLevel = LevelMentions
+	mentions.OnMention = false // the channel's own choice wins over the global toggle
+	if ShouldNotify(mentions, "C1", "U2", plain, "channel") {
+		t.Error("level mentions_dms: plain message should not notify")
+	}
+	if !ShouldNotify(mentions, "C1", "U2", mention, "channel") {
+		t.Error("level mentions_dms: mention should notify")
+	}
+	if !ShouldNotify(mentions, "C1", "U2", "deploy now", "channel") {
+		t.Error("level mentions_dms: keyword should notify")
+	}
+
+	// A followed thread still notifies in a channel set to nothing.
+	thread := nothing
+	thread.OnThread = true
+	thread.ThreadFollowed = true
+	if !ShouldNotify(thread, "C1", "U2", plain, "channel") {
+		t.Error("level nothing: followed thread reply should notify")
+	}
+}

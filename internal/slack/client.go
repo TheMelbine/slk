@@ -1387,21 +1387,38 @@ func (c *Client) MarkThreadUnread(ctx context.Context, channelID, threadTS, ts s
 	return c.markThread(ctx, channelID, threadTS, ts, false)
 }
 
-// GetMutedChannels fetches the authenticated user's mute set by
-// reading users.prefs.get and parsing the per-channel notification
-// prefs blob. Returns the IDs of channels the user has muted.
+// ChannelNotifyPrefs is the slice of Slack's per-channel notification
+// prefs slk acts on. Desktop is the channel's desktop level as Slack
+// names it: "everything", "mentions_dms" or "nothing". Empty means the
+// user never customized the channel and the workspace default applies.
+type ChannelNotifyPrefs struct {
+	Muted   bool
+	Desktop string
+}
+
+// Desktop notification levels as they appear in all_notifications_prefs.
+const (
+	NotifyEverything = "everything"
+	NotifyMentions   = "mentions_dms"
+	NotifyNothing    = "nothing"
+)
+
+// GetChannelNotificationPrefs fetches the authenticated user's
+// per-channel notification prefs (mute state and desktop level) by
+// reading users.prefs.get and parsing the notification prefs blob.
 //
 // Slack does NOT ship a flat `muted_channels` pref anymore (it used
 // to, and is still documented as such in some places, but live
 // browser-protocol responses no longer include it). Mute state lives
 // inside the JSON-encoded `all_notifications_prefs` string under
-// channels[id].muted=true. After this initial fetch, pref_change WS
-// events for `all_notifications_prefs` keep the set fresh.
+// channels[id].muted=true, next to channels[id].desktop. After this
+// initial fetch, pref_change WS events for `all_notifications_prefs`
+// keep the set fresh.
 //
 // users.prefs.get is undocumented but is the same call the official
 // browser client uses; may break if Slack changes the API. Returns an
-// empty slice (not nil) when the user has no muted channels.
-func (c *Client) GetMutedChannels(ctx context.Context) ([]string, error) {
+// empty map (not nil) when the user customized nothing.
+func (c *Client) GetChannelNotificationPrefs(ctx context.Context) (map[string]ChannelNotifyPrefs, error) {
 	body, err := c.postForm(ctx, "users.prefs.get", nil)
 	if err != nil {
 		return nil, err
@@ -1424,46 +1441,67 @@ func (c *Client) GetMutedChannels(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("users.prefs.get returned ok=false (error=%q, body=%q)", parsed.Error, truncateForLog(body))
 	}
 
-	merged := map[string]bool{}
-	for _, id := range strings.Split(parsed.Prefs.MutedChannels, ",") {
-		id = strings.TrimSpace(id)
-		if id != "" {
-			merged[id] = true
-		}
-	}
-	for _, id := range ParseMutedFromAllNotificationsPrefs(parsed.Prefs.AllNotificationPrefs) {
-		merged[id] = true
-	}
-	debuglog.WS("users.prefs.get: muted_channels=%d all_notifications_prefs_len=%d total_muted=%d",
+	merged := MergeChannelNotificationPrefs(parsed.Prefs.MutedChannels, parsed.Prefs.AllNotificationPrefs)
+	debuglog.WS("users.prefs.get: muted_channels=%d all_notifications_prefs_len=%d channels=%d",
 		len(parsed.Prefs.MutedChannels), len(parsed.Prefs.AllNotificationPrefs), len(merged))
-	out := make([]string, 0, len(merged))
-	for id := range merged {
-		out = append(out, id)
-	}
-	return out, nil
+	return merged, nil
 }
 
-// ParseMutedFromAllNotificationsPrefs decodes the JSON-string value
-// of the `all_notifications_prefs` pref and returns the channel IDs
-// where channels[id].muted == true. The pref's value is itself a
-// JSON-encoded string (Slack quirk), so callers should pass the raw
-// string contents directly. Returns an empty slice on any decode
-// failure — mute is best-effort UI sugar, not safety-critical.
-func ParseMutedFromAllNotificationsPrefs(raw string) []string {
+// MergeChannelNotificationPrefs combines the legacy comma-separated
+// muted_channels pref with the all_notifications_prefs blob. Both are
+// merged rather than either winning: a channel in the legacy list is
+// muted even when the blob says otherwise.
+func MergeChannelNotificationPrefs(legacyMuted, allPrefs string) map[string]ChannelNotifyPrefs {
+	merged := ParseAllNotificationsPrefs(allPrefs)
+	if merged == nil {
+		merged = map[string]ChannelNotifyPrefs{}
+	}
+	for _, id := range strings.Split(legacyMuted, ",") {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		p := merged[id]
+		p.Muted = true
+		merged[id] = p
+	}
+	return merged
+}
+
+// ParseAllNotificationsPrefs decodes the JSON-string value of the
+// `all_notifications_prefs` pref into per-channel prefs. The pref's
+// value is itself a JSON-encoded string (Slack quirk), so callers
+// should pass the raw string contents directly. Returns nil on any
+// decode failure — these prefs are best-effort UI sugar, not
+// safety-critical.
+func ParseAllNotificationsPrefs(raw string) map[string]ChannelNotifyPrefs {
 	if raw == "" {
 		return nil
 	}
 	var parsed struct {
 		Channels map[string]struct {
-			Muted bool `json:"muted"`
+			Muted   bool   `json:"muted"`
+			Desktop string `json:"desktop"`
 		} `json:"channels"`
 	}
 	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
 		return nil
 	}
-	out := make([]string, 0, len(parsed.Channels))
+	out := make(map[string]ChannelNotifyPrefs, len(parsed.Channels))
 	for id, prefs := range parsed.Channels {
-		if prefs.Muted {
+		out[id] = ChannelNotifyPrefs{Muted: prefs.Muted, Desktop: prefs.Desktop}
+	}
+	return out
+}
+
+// ParseMutedFromAllNotificationsPrefs returns the channel IDs where
+// all_notifications_prefs says channels[id].muted == true. Returns an
+// empty slice on any decode failure.
+func ParseMutedFromAllNotificationsPrefs(raw string) []string {
+	prefs := ParseAllNotificationsPrefs(raw)
+	out := make([]string, 0, len(prefs))
+	for id, p := range prefs {
+		if p.Muted {
 			out = append(out, id)
 		}
 	}

@@ -206,6 +206,9 @@ func (h *rtmEventHandler) OnMessage(channelID, userID, ts, text, threadTS, subty
 			IsDND:           h.wsCtx != nil && h.wsCtx.DNDEnabled && (h.wsCtx.DNDEndTS.IsZero() || time.Now().Before(h.wsCtx.DNDEndTS)),
 			IsMuted:         h.wsCtx != nil && h.wsCtx.MuteStore != nil && h.wsCtx.MuteStore.IsMuted(channelID),
 		}
+		if h.wsCtx != nil && h.wsCtx.MuteStore != nil {
+			ctx.ChannelLevel = h.wsCtx.MuteStore.DesktopLevel(channelID)
+		}
 		isReply := threadTS != "" && threadTS != ts
 		if isReply && h.notifyCfg.OnThread && h.db != nil {
 			ctx.OnThread = true

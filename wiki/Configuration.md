@@ -61,6 +61,12 @@ quiet_hours = "22:00-08:00"   # planned
 # matching Slack. (This is a behavior change: previously a mention or keyword
 # in a muted channel would still notify.)
 
+# Per-channel levels set in Slack ("Notification preferences" on a channel:
+# all new messages / mentions / nothing) are honored. A channel with a level
+# uses that level instead of on_mention / on_dm; on_keyword still applies at
+# the "mentions" level. Channels you never customized follow the switches
+# above. Changes made in Slack take effect live.
+
 [compose]
 editor = "nvim"   # Ctrl+E editor, used when $VISUAL and $EDITOR are unset
 

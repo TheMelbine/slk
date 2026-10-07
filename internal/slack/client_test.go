@@ -1190,8 +1190,8 @@ func TestHandRolledEndpoints_FormBodyTokenNoBearer(t *testing.T) {
 			name:     "GetMutedChannels",
 			respBody: `{"ok":true,"prefs":{"muted_channels":""}}`,
 			call: func(t *testing.T, c *Client) {
-				if _, err := c.GetMutedChannels(context.Background()); err != nil {
-					t.Fatalf("GetMutedChannels: %v", err)
+				if _, err := c.GetChannelNotificationPrefs(context.Background()); err != nil {
+					t.Fatalf("GetChannelNotificationPrefs: %v", err)
 				}
 			},
 		},
@@ -1543,7 +1543,7 @@ func TestMarkThreadUnread_EmptyArgs_NoOp(t *testing.T) {
 	}
 }
 
-func TestGetMutedChannels_FromAllNotificationsPrefs(t *testing.T) {
+func TestGetChannelNotificationPrefs_FromAllNotificationsPrefs(t *testing.T) {
 	// Real-world: Slack ships mute state inside the JSON-string
 	// `all_notifications_prefs` pref under channels[id].muted.
 	respBody := `{"ok":true,"prefs":{"all_notifications_prefs":"{\"channels\":{\"C1\":{\"muted\":true},\"C2\":{\"muted\":false},\"C3\":{\"muted\":true}},\"global\":{}}"}}`
@@ -1561,9 +1561,9 @@ func TestGetMutedChannels_FromAllNotificationsPrefs(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestClient(srv)
-	got, err := c.GetMutedChannels(context.Background())
+	got, err := c.GetChannelNotificationPrefs(context.Background())
 	if err != nil {
-		t.Fatalf("GetMutedChannels: %v", err)
+		t.Fatalf("GetChannelNotificationPrefs: %v", err)
 	}
 	if !strings.HasSuffix(gotPath, "/users.prefs.get") {
 		t.Errorf("path: got %q, want suffix /users.prefs.get", gotPath)
@@ -1578,8 +1578,10 @@ func TestGetMutedChannels_FromAllNotificationsPrefs(t *testing.T) {
 		t.Errorf("form body token: got %q, want xoxc-test", gotTokenInBody)
 	}
 	gotSet := map[string]bool{}
-	for _, id := range got {
-		gotSet[id] = true
+	for id, p := range got {
+		if p.Muted {
+			gotSet[id] = true
+		}
 	}
 	if !gotSet["C1"] || !gotSet["C3"] {
 		t.Errorf("expected C1 and C3 muted, got %v", got)
@@ -1587,12 +1589,12 @@ func TestGetMutedChannels_FromAllNotificationsPrefs(t *testing.T) {
 	if gotSet["C2"] {
 		t.Errorf("C2 should not be muted (muted=false), got %v", got)
 	}
-	if len(got) != 2 {
+	if len(gotSet) != 2 {
 		t.Errorf("len = %d, want 2 (got %v)", len(got), got)
 	}
 }
 
-func TestGetMutedChannels_LegacyMutedChannelsField(t *testing.T) {
+func TestGetChannelNotificationPrefs_LegacyMutedChannelsField(t *testing.T) {
 	// Back-compat: if Slack ever ships the flat muted_channels pref
 	// again, we still pick it up.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1601,20 +1603,22 @@ func TestGetMutedChannels_LegacyMutedChannelsField(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := newTestClient(srv)
-	got, err := c.GetMutedChannels(context.Background())
+	got, err := c.GetChannelNotificationPrefs(context.Background())
 	if err != nil {
-		t.Fatalf("GetMutedChannels: %v", err)
+		t.Fatalf("GetChannelNotificationPrefs: %v", err)
 	}
 	gotSet := map[string]bool{}
-	for _, id := range got {
-		gotSet[id] = true
+	for id, p := range got {
+		if p.Muted {
+			gotSet[id] = true
+		}
 	}
-	if !gotSet["C1"] || !gotSet["C2"] || len(got) != 2 {
+	if !gotSet["C1"] || !gotSet["C2"] || len(gotSet) != 2 {
 		t.Errorf("expected {C1,C2}, got %v", got)
 	}
 }
 
-func TestGetMutedChannels_BothPrefsMerged(t *testing.T) {
+func TestGetChannelNotificationPrefs_BothPrefsMerged(t *testing.T) {
 	// Defensive: if a workspace returns both, we take the union.
 	respBody := `{"ok":true,"prefs":{"muted_channels":"C1","all_notifications_prefs":"{\"channels\":{\"C2\":{\"muted\":true}}}"}}`
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1623,20 +1627,22 @@ func TestGetMutedChannels_BothPrefsMerged(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := newTestClient(srv)
-	got, err := c.GetMutedChannels(context.Background())
+	got, err := c.GetChannelNotificationPrefs(context.Background())
 	if err != nil {
-		t.Fatalf("GetMutedChannels: %v", err)
+		t.Fatalf("GetChannelNotificationPrefs: %v", err)
 	}
 	gotSet := map[string]bool{}
-	for _, id := range got {
-		gotSet[id] = true
+	for id, p := range got {
+		if p.Muted {
+			gotSet[id] = true
+		}
 	}
-	if !gotSet["C1"] || !gotSet["C2"] || len(got) != 2 {
+	if !gotSet["C1"] || !gotSet["C2"] || len(gotSet) != 2 {
 		t.Errorf("expected union {C1,C2}, got %v", got)
 	}
 }
 
-func TestGetMutedChannels_EmptyChannelsObject(t *testing.T) {
+func TestGetChannelNotificationPrefs_EmptyChannelsObject(t *testing.T) {
 	// Workspaces with no muted channels return channels:{} — should
 	// produce an empty (non-nil) slice.
 	respBody := `{"ok":true,"prefs":{"all_notifications_prefs":"{\"channels\":{},\"global\":{}}"}}`
@@ -1646,9 +1652,9 @@ func TestGetMutedChannels_EmptyChannelsObject(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := newTestClient(srv)
-	got, err := c.GetMutedChannels(context.Background())
+	got, err := c.GetChannelNotificationPrefs(context.Background())
 	if err != nil {
-		t.Fatalf("GetMutedChannels: %v", err)
+		t.Fatalf("GetChannelNotificationPrefs: %v", err)
 	}
 	if len(got) != 0 {
 		t.Errorf("len = %d, want 0 (got %v)", len(got), got)
@@ -1665,14 +1671,14 @@ func TestParseMutedFromAllNotificationsPrefs_BadJSON(t *testing.T) {
 	}
 }
 
-func TestGetMutedChannels_ApiError(t *testing.T) {
+func TestGetChannelNotificationPrefs_ApiError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"ok":false,"error":"invalid_auth"}`))
 	}))
 	defer srv.Close()
 	c := newTestClient(srv)
-	_, err := c.GetMutedChannels(context.Background())
+	_, err := c.GetChannelNotificationPrefs(context.Background())
 	if err == nil {
 		t.Fatal("expected error for ok=false response")
 	}
@@ -3370,5 +3376,32 @@ func TestMarkChannel_NonJSONBody_ReturnsError(t *testing.T) {
 
 	if err := newTestClient(srv).MarkChannel(context.Background(), "C123", "1700000000.000100"); err == nil {
 		t.Fatal("MarkChannel: want error for non-JSON 200 body, got nil")
+	}
+}
+
+func TestParseAllNotificationsPrefs_DesktopLevels(t *testing.T) {
+	raw := `{"channels":{` +
+		`"C1":{"muted":true,"desktop":"nothing"},` +
+		`"C2":{"desktop":"mentions_dms","mobile":"everything"},` +
+		`"C3":{"desktop":"everything"},` +
+		`"C4":{"follow_all_threads":true}` +
+		`},"global":{"global_desktop":"everything"}}`
+	got := ParseAllNotificationsPrefs(raw)
+	want := map[string]ChannelNotifyPrefs{
+		"C1": {Muted: true, Desktop: "nothing"},
+		"C2": {Desktop: "mentions_dms"},
+		"C3": {Desktop: "everything"},
+		"C4": {},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for id, w := range want {
+		if got[id] != w {
+			t.Errorf("%s: got %+v, want %+v", id, got[id], w)
+		}
+	}
+	if ParseAllNotificationsPrefs("garbage") != nil {
+		t.Error("bad JSON should yield nil")
 	}
 }

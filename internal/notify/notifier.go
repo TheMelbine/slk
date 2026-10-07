@@ -63,7 +63,20 @@ type NotifyContext struct {
 	OnThread        bool // notify on replies in followed threads
 	ThreadFollowed  bool // the message is a reply in a thread the user follows
 	ThreadOpen      bool // that thread is on screen right now
+	// ChannelLevel is the desktop level the user set on this channel in
+	// Slack (LevelEverything, LevelMentions, LevelNothing). Empty means
+	// the channel was never customized and OnMention/OnDM/OnKeyword
+	// decide. A set level replaces those switches for this channel.
+	ChannelLevel string
 }
+
+// Per-channel desktop levels, named as Slack's all_notifications_prefs
+// names them.
+const (
+	LevelEverything = "everything"
+	LevelMentions   = "mentions_dms"
+	LevelNothing    = "nothing"
+)
 
 // ShouldNotify returns true if a message should trigger a desktop notification.
 func ShouldNotify(ctx NotifyContext, channelID, userID, text, channelType string) bool {
@@ -87,13 +100,22 @@ func ShouldNotify(ctx NotifyContext, channelID, userID, text, channelType string
 
 	// Suppress notifications from a muted conversation — a muted channel or DM
 	// is silent, matching Slack.
-	if ctx.IsMuted {
+	if ctx.IsMuted || ctx.ChannelLevel == LevelNothing {
 		return false
 	}
 
 	// Suppress if viewing this channel on the active workspace
 	if ctx.IsActiveWS && channelID == ctx.ActiveChannelID {
 		return false
+	}
+
+	// A level the user picked for this channel in Slack replaces the
+	// global on_* switches.
+	switch ctx.ChannelLevel {
+	case LevelEverything:
+		return true
+	case LevelMentions:
+		return mention.InText(text, ctx.CurrentUserID) || matchesKeyword(text, ctx.OnKeyword)
 	}
 
 	// Check DM trigger
@@ -109,15 +131,21 @@ func ShouldNotify(ctx NotifyContext, channelID, userID, text, channelType string
 	}
 
 	// Check keyword triggers
-	if len(ctx.OnKeyword) > 0 {
-		lower := strings.ToLower(text)
-		for _, kw := range ctx.OnKeyword {
-			if strings.Contains(lower, strings.ToLower(kw)) {
-				return true
-			}
+	return matchesKeyword(text, ctx.OnKeyword)
+}
+
+// matchesKeyword reports whether text contains any of the configured
+// keywords, case-insensitively.
+func matchesKeyword(text string, keywords []string) bool {
+	if len(keywords) == 0 {
+		return false
+	}
+	lower := strings.ToLower(text)
+	for _, kw := range keywords {
+		if strings.Contains(lower, strings.ToLower(kw)) {
+			return true
 		}
 	}
-
 	return false
 }
 

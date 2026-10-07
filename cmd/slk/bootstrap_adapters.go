@@ -21,7 +21,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/gammons/slk/internal/bootstrap"
 	"github.com/gammons/slk/internal/cache"
@@ -297,30 +296,17 @@ func boundedMessageVersions(src messageWindowSource, channelID string) (map[stri
 // Result.
 type bootMutedChannels struct{ res *bootstrap.Result }
 
-// GetMutedChannels merges the two prefs the same way
-// slackclient.GetMutedChannels does, and in the same order: the legacy
-// flat comma-separated list first, then all_notifications_prefs, which
-// is where mute state actually lives today. Both are merged rather than
-// either winning — the legacy key was absent from the captured response
-// (all 702 prefs keys were checked) but slk still supports workspaces
-// that ship it.
+// GetChannelNotificationPrefs merges the two prefs the same way
+// slackclient.GetChannelNotificationPrefs does: the legacy flat
+// comma-separated list and all_notifications_prefs, which is where
+// mute state and desktop levels actually live today. Both are merged
+// rather than either winning — the legacy key was absent from the
+// captured response (all 702 prefs keys were checked) but slk still
+// supports workspaces that ship it.
 //
 // ctx is unused: everything needed was already fetched.
-func (b bootMutedChannels) GetMutedChannels(_ context.Context) ([]string, error) {
-	merged := map[string]bool{}
-	for _, id := range strings.Split(b.res.LegacyMutedRaw, ",") {
-		if id = strings.TrimSpace(id); id != "" {
-			merged[id] = true
-		}
-	}
-	for _, id := range slackclient.ParseMutedFromAllNotificationsPrefs(b.res.MutePrefsRaw) {
-		merged[id] = true
-	}
-	out := make([]string, 0, len(merged))
-	for id := range merged {
-		out = append(out, id)
-	}
-	return out, nil
+func (b bootMutedChannels) GetChannelNotificationPrefs(_ context.Context) (map[string]slackclient.ChannelNotifyPrefs, error) {
+	return slackclient.MergeChannelNotificationPrefs(b.res.LegacyMutedRaw, b.res.MutePrefsRaw), nil
 }
 
 // bootUserDisplayName picks the name to show for a user
