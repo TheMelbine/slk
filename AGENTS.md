@@ -173,6 +173,7 @@ greppable by name; no line numbers, because these files move.
 | Park the message viewport at an exact `yOffset` | `scrollTo(off)` (same file) |
 | Make nav-history entries resolvable | `navLookupOpt()` (same file) |
 | Run only the first command of a `tea.Batch` (skip a 2s tick) | `firstBatchCmd(t, cmd)` (`internal/ui/mode_insert_keys_test.go`) |
+| An `App` with the main composer mid-upload, a thread open with its own draft, and workspaces T1/T2, counting uploader and workspace-switcher calls | `uploadGuardApp(t)` (`internal/ui/conversation_drafts_safety_test.go`) |
 | Observe a compose cursor position or blur state (no getter exists) | `afterKeyValue(c, r)` (same file) |
 
 ### Known duplication — do not add to it
