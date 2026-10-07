@@ -281,7 +281,8 @@ func uploadGuardApp(t *testing.T) (a *App, uploads *int, switched *[]string) {
 
 // TestDraftSafety_UploadInFlightRefusesEntryPoints drives every entry
 // point that could move the composer, the thread or the workspace
-// while an upload is in flight, and pins that each one only toasts.
+// while an upload is in flight, and pins that each one is refused
+// without moving state. Entry points that return a command also toast.
 func TestDraftSafety_UploadInFlightRefusesEntryPoints(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
