@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 func TestFilterByDisplayNamePrefix(t *testing.T) {
@@ -295,5 +297,29 @@ func TestFilterAccentInsensitive(t *testing.T) {
 					tc.query, tc.wantID, m.Filtered()[0].ID)
 			}
 		})
+	}
+}
+
+func TestViewShowsAvatarsBeforeNames(t *testing.T) {
+	m := New()
+	m.SetAvatarFunc(func(userID string) string {
+		if userID == "U1" {
+			return "AV"
+		}
+		return ""
+	})
+	m.SetUsers([]User{
+		{ID: "U1", DisplayName: "jane.doe", InChannel: true},
+		{ID: "U2", DisplayName: "john.roe", InChannel: true},
+	})
+	m.Open()
+	m.SetQuery("j")
+	out := ansi.Strip(m.View(40))
+	if !strings.Contains(out, "AV jane.doe") {
+		t.Errorf("avatar should precede the name: %q", out)
+	}
+	// A user without an avatar keeps the same column for the name.
+	if !strings.Contains(out, "   john.roe") {
+		t.Errorf("missing avatar should leave an equal-width gap: %q", out)
 	}
 }

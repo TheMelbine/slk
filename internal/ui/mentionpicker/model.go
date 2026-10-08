@@ -43,12 +43,22 @@ var specialMentions = []User{
 	{ID: "special:everyone", DisplayName: "everyone", Username: "everyone", InChannel: true},
 }
 
+// AvatarFunc returns a one-row avatar for a user ID, or "" while it is
+// not available. The picker draws it in front of the name.
+type AvatarFunc func(userID string) string
+
+// avatarCols is the width of the one-row avatar the picker draws; it
+// matches avatar.MiniCols. Rows without an avatar get a gap of the same
+// width so the names stay aligned.
+const avatarCols = 2
+
 type Model struct {
 	users    []User
 	filtered []User
 	query    string
 	selected int
 	visible  bool
+	avatarFn AvatarFunc
 }
 
 func New() Model {
@@ -57,6 +67,27 @@ func New() Model {
 
 func (m *Model) SetUsers(users []User) {
 	m.users = users
+}
+
+// SetAvatarFunc sets the one-row avatar renderer drawn before each
+// user's name. nil disables avatars.
+func (m *Model) SetAvatarFunc(fn AvatarFunc) {
+	m.avatarFn = fn
+}
+
+// avatarCell is the avatar column for u: the rendered mini avatar plus
+// a gap, or blanks of the same width when there is no avatar (special
+// mentions, avatar still loading, avatars disabled).
+func (m *Model) avatarCell(u User) string {
+	if m.avatarFn == nil {
+		return ""
+	}
+	if !strings.HasPrefix(u.ID, "special:") {
+		if av := m.avatarFn(u.ID); av != "" {
+			return av + " "
+		}
+	}
+	return strings.Repeat(" ", avatarCols+1)
 }
 
 // Users returns the user list most recently set via SetUsers.
@@ -224,7 +255,7 @@ func (m *Model) View(width int) string {
 			label = fmt.Sprintf("%s (%s)", u.DisplayName, u.Username)
 		}
 
-		row := indicator + nameStyle.Render(label)
+		row := indicator + m.avatarCell(u) + nameStyle.Render(label)
 
 		// Suffix in TextMuted, always (even when row is selected).
 		var suffix string

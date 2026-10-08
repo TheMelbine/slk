@@ -2752,6 +2752,12 @@ func (a *App) SetAvatarService(s core.AvatarService) {
 		m.SetMiniAvatarFunc(mini)
 	}
 	a.threadPanel.SetAvatarFunc(fn)
+	var pickerFn mentionpicker.AvatarFunc
+	if mini != nil {
+		pickerFn = mentionpicker.AvatarFunc(mini)
+	}
+	a.compose.SetAvatarFunc(pickerFn)
+	a.threadCompose.SetAvatarFunc(pickerFn)
 }
 
 // SetColoredUsernames enables or disables deterministic per-user coloring

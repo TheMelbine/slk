@@ -825,6 +825,13 @@ func (m *Model) SetUsers(users []mentionpicker.User) {
 	m.rebuildMentionUsers()
 }
 
+// SetAvatarFunc sets the one-row avatar renderer the mention picker
+// draws before each name.
+func (m *Model) SetAvatarFunc(fn mentionpicker.AvatarFunc) {
+	m.mentionPicker.SetAvatarFunc(fn)
+	m.dirty()
+}
+
 // SetUserGroups provides the active workspace's Slack usergroups for
 // @handle autocomplete and send-time <!subteam^SID|@handle> translation.
 func (m *Model) SetUserGroups(groups map[string]string) {
