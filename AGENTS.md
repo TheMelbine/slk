@@ -137,6 +137,7 @@ scrollbars, date formatting, case folding, or ID formatting: it already exists.
 | Window tree geometry | `ui/wintree` |
 | Modal geometry / row hit-testing | `boxedOverlay`, `clickableOverlay` (list rows), `pointClickable` (a single glyph, e.g. the profile dialog's 📋) in `internal/ui/reducer_modal_click.go` |
 | Channel/DM destination picker for forwarding | `channelfinder.Model.OpenForForwarding()` (joined conversations only); `Open()` restores the normal switcher |
+| Bind a composer to the conversation its draft belongs to | `(*compose.Model).SetDraftContext(teamID, channelID, threadTS)` — an empty channel detaches (saves the prior conversation's draft, clears the visible input). `SetActiveChannel` sets only mention context; it does not move draft storage |
 
 ### Test helpers
 
@@ -175,6 +176,7 @@ greppable by name; no line numbers, because these files move.
 | Park the message viewport at an exact `yOffset` | `scrollTo(off)` (same file) |
 | Make nav-history entries resolvable | `navLookupOpt()` (same file) |
 | Run only the first command of a `tea.Batch` (skip a 2s tick) | `firstBatchCmd(t, cmd)` (`internal/ui/mode_insert_keys_test.go`) |
+| An `App` with the main composer mid-upload, a thread open with its own draft, and workspaces T1/T2, counting uploader and workspace-switcher calls | `uploadGuardApp(t)` (`internal/ui/conversation_drafts_safety_test.go`) |
 | Observe a compose cursor position or blur state (no getter exists) | `afterKeyValue(c, r)` (same file) |
 
 ### Known duplication — do not add to it
