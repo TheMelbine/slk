@@ -28,6 +28,7 @@ type Model struct {
 	connState   ConnectionState
 	inThread    bool
 	toast       string // "" == no toast; otherwise rendered verbatim in the right slot
+	toastGen    uint64 // bumped on every SetToast; a clear carries the gen it was scheduled for
 	presence    string // "active", "away", or "" (unknown — segment hidden)
 	dndEnabled  bool
 	dndEndTS    time.Time // zero if not in DND
@@ -188,10 +189,27 @@ func (m *Model) SetCommandLine(s string) {
 // to clear. Callers are responsible for clearing the toast (typically via a
 // tea.Tick that delivers CopiedClearMsg).
 func (m *Model) SetToast(s string) {
+	m.toastGen++
 	if m.toast != s {
 		m.toast = s
 		m.dirty()
 	}
+}
+
+// ToastGen identifies the toast currently shown. A clear scheduled for
+// an earlier toast carries an older gen and is ignored, so a toast that
+// replaced it gets its full display time.
+func (m *Model) ToastGen() uint64 {
+	return m.toastGen
+}
+
+// ClearToast removes the toast when gen is the one from ToastGen at
+// the time the clear was scheduled. gen 0 clears unconditionally.
+func (m *Model) ClearToast(gen uint64) {
+	if gen != 0 && gen != m.toastGen {
+		return
+	}
+	m.ClearCopied()
 }
 
 // ShowCopied is a backwards-compatible shim that sets the toast to
@@ -391,8 +409,9 @@ type CopiedMsg struct {
 	N int
 }
 
-// CopiedClearMsg is the follow-up tick that clears the toast.
-type CopiedClearMsg struct{}
+// CopiedClearMsg is the follow-up tick that clears the toast. Gen is
+// the ToastGen the clear was scheduled for; 0 clears whatever is shown.
+type CopiedClearMsg struct{ Gen uint64 }
 
 // PermalinkCopiedMsg is delivered when a message permalink has been copied to
 // the clipboard. App handles it by setting the toast to "Copied permalink"

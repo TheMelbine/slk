@@ -64,11 +64,13 @@ import (
 	"github.com/gammons/slk/internal/ui/statusbar"
 )
 
-// copiedClearAfter schedules a CopiedClearMsg `d` from now. The
-// status bar's CopiedClearMsg handler clears the toast slot.
-func copiedClearAfter(d time.Duration) tea.Cmd {
+// copiedClearAfter schedules a CopiedClearMsg `d` from now for the
+// toast currently shown. The status bar's CopiedClearMsg handler clears
+// the toast slot unless a newer toast has replaced it since.
+func copiedClearAfter(a *App, d time.Duration) tea.Cmd {
+	gen := a.statusbar.ToastGen()
 	return tea.Tick(d, func(time.Time) tea.Msg {
-		return statusbar.CopiedClearMsg{}
+		return statusbar.CopiedClearMsg{Gen: gen}
 	})
 }
 
@@ -87,7 +89,7 @@ const emojiInvalidateDebounce = 100 * time.Millisecond
 // formatted-reason toasts below.
 func toastWithClear(a *App, text string, d time.Duration) tea.Cmd {
 	a.statusbar.SetToast(text)
-	return copiedClearAfter(d)
+	return copiedClearAfter(a, d)
 }
 
 var reduceIO reducerFunc = func(a *App, msg tea.Msg) (tea.Cmd, bool) {
@@ -97,11 +99,10 @@ var reduceIO reducerFunc = func(a *App, msg tea.Msg) (tea.Cmd, bool) {
 
 	case statusbar.CopiedMsg:
 		a.statusbar.ShowCopied(m.N)
-		return copiedClearAfter(2 * time.Second), true
+		return copiedClearAfter(a, 2*time.Second), true
 
 	case statusbar.CopiedClearMsg:
-		_ = m
-		a.statusbar.ClearCopied()
+		a.statusbar.ClearToast(m.Gen)
 		return nil, true
 
 	case statusbar.PermalinkCopiedMsg:

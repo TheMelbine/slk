@@ -503,3 +503,26 @@ func TestDrag_MotionCoalescing_TickAllowsReschedule(t *testing.T) {
 		t.Errorf("post-tick motion must schedule a new motionFlushTickMsg; cmd produced no flush tick")
 	}
 }
+
+func TestToast_StaleClearKeepsNewerToast(t *testing.T) {
+	a := NewApp()
+	_, first := a.Update(statusbar.ChannelNotifyLevelMsg{Level: "mentions_dms"})
+	if first == nil {
+		t.Fatal("expected a clear tick for the first toast")
+	}
+	// Before the first tick fires, a second press replaces the toast.
+	_, _ = a.Update(statusbar.ChannelNotifyLevelMsg{Level: "nothing"})
+	if !strings.Contains(a.statusbar.View(80), "nothing") {
+		t.Fatalf("second toast not shown: %q", a.statusbar.View(80))
+	}
+	// The first toast's clear must not wipe the second one.
+	_, _ = a.Update(statusbar.CopiedClearMsg{Gen: a.statusbar.ToastGen() - 1})
+	if !strings.Contains(a.statusbar.View(80), "nothing") {
+		t.Fatalf("stale clear wiped the newer toast: %q", a.statusbar.View(80))
+	}
+	// Its own clear still works.
+	_, _ = a.Update(statusbar.CopiedClearMsg{Gen: a.statusbar.ToastGen()})
+	if strings.Contains(a.statusbar.View(80), "nothing") {
+		t.Fatalf("current clear did not remove the toast")
+	}
+}
