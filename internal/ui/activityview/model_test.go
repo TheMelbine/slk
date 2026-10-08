@@ -170,17 +170,17 @@ func TestRenderCardAlwaysTwoLines(t *testing.T) {
 	}
 }
 
-// renderRows lays cards out as two content lines each with one blank
+// renderLines lays cards out as two content lines each with one blank
 // separator between adjacent cards (none after the last), matching the
 // Threads view. No line may contain a newline.
-func TestRenderRowsSeparatesCards(t *testing.T) {
+func TestRenderLinesSeparatesCards(t *testing.T) {
 	m := New(nil, "")
 	m.SetItems([]core.ActivityItem{
 		{Type: "at_user", ChannelID: "C1", TS: "1.1", Key: "a"},
 		{Type: "dm", ChannelID: "C2", TS: "2.2", Key: "b"},
 		{Type: "thread_v2", ChannelID: "C3", TS: "3.3", Key: "c"},
 	})
-	lines := m.renderRows(60)
+	lines := m.renderLines(0, 3*cardStride-1, 60)
 	if want := 3*2 + 2; len(lines) != want {
 		t.Fatalf("want %d lines (3 two-line cards + 2 separators), got %d", want, len(lines))
 	}
