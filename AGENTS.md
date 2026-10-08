@@ -89,6 +89,7 @@ scrollbars, date formatting, case folding, or ID formatting: it already exists.
 | Plain-text line segmentation (grapheme-correct) | `messages.PlainLines`, `messages.DisplayWidthOfPlain`, `messages.SliceColumns` |
 | Display width of a string (emoji-aware) | `emoji.Width(s)` |
 | Case/accent-insensitive fold for matching | `text.Fold(s)` |
+| Is a key string one printable character for a type-to-filter query? | `text.IsQueryRune(key)`; delete with `text.TrimLastRune(q)` |
 | Slack mrkdwn → plain text | `messages.FlattenMrkdwn`, `messages.FlattenMrkdwnWithUserGroups` |
 | Search-term highlighting (ANSI/OSC-safe) | `messages.HighlightSearchTerms`, `messages.SearchHighlightSGR` |
 | Extract links from message text | `messages.ExtractLinks` |
