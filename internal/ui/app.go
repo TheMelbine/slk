@@ -2291,7 +2291,8 @@ func (a *App) CloseThread() {
 // has highlighted (so the right thread panel shows the parent immediately),
 // then schedules the network fetch.
 //
-// When debounce is true (j/k key handlers), the fetch is delayed by
+// When debounce is true (j/k key handlers), the panel also shows the
+// cached replies immediately, and the fetch is delayed by
 // openThreadDebounceDelay and coalesced via pendingThreadFetchGen so a
 // held-j burst produces exactly one HTTP call. When debounce is false
 // (activation, list reload, G jump), the fetch fires immediately so
@@ -2324,7 +2325,16 @@ func (a *App) openSelectedThreadCmd(debounce bool) tea.Cmd {
 		Text:     sum.ParentText,
 		ThreadTS: sum.ThreadTS,
 	}
-	a.threadPanel.SetThread(parent, nil, sum.ChannelID, sum.ThreadTS)
+	// j/k: show the cached replies with the parent now. Only the fetch,
+	// and the mark-read its result triggers, wait for the debounce, so
+	// held keys still mark nothing read on the way past.
+	var cachedReplies []messages.MessageItem
+	if debounce {
+		if cached := a.threads.CacheRead(ids.ChannelID(sum.ChannelID), ids.ThreadTS(sum.ThreadTS)); len(cached) > 1 {
+			cachedReplies = cached[1:] // strip parent
+		}
+	}
+	a.threadPanel.SetThread(parent, cachedReplies, sum.ChannelID, sum.ThreadTS)
 	a.threadCompose.SetChannel(a.threadComposeChannelName(sum.ChannelID))
 	a.threadCompose.SetActiveChannel(sum.ChannelID)
 	a.threadCompose.SetDraftContext(a.activeTeamID, sum.ChannelID, sum.ThreadTS)
