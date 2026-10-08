@@ -152,6 +152,30 @@ func (m *Model) SetUserNames(names map[string]string) {
 	m.dirty()
 }
 
+// PatchUserName records a display name resolved after SetUserNames and
+// bumps the version when a card shows that user (as actor, hydrated
+// author, or a <@id> mention in the body). The map is normally the App's
+// shared one, which already holds the name, so the bump is decided by
+// the cards rather than by a map change; unrelated names, which resolve
+// in bursts, cost no re-render.
+func (m *Model) PatchUserName(userID, displayName string) {
+	if userID == "" {
+		return
+	}
+	if m.userNames == nil {
+		m.userNames = map[string]string{}
+	}
+	m.userNames[userID] = displayName
+	mention := "<@" + userID
+	for _, it := range m.items {
+		body := m.bodies[core.ActivityMsgKey(it.ChannelID, it.TS)]
+		if it.AuthorID == userID || body.UserID == userID || strings.Contains(body.Text, mention) {
+			m.dirty()
+			return
+		}
+	}
+}
+
 // SetChannelNames replaces the channel id -> name map. No-op when
 // content-equal to the current one.
 func (m *Model) SetChannelNames(names map[string]string) {

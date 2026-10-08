@@ -147,6 +147,29 @@ func (m *Model) SetUserNames(names map[string]string) {
 	m.dirty()
 }
 
+// PatchUserName records a display name resolved after SetUserNames and
+// bumps the version when a card shows that user (as author, last
+// replier, or a <@id> mention in the preview). The map is normally the
+// App's shared one, which already holds the name, so the bump is decided
+// by the cards rather than by a map change; unrelated names, which
+// resolve in bursts, cost no re-render.
+func (m *Model) PatchUserName(userID, displayName string) {
+	if userID == "" {
+		return
+	}
+	if m.userNames == nil {
+		m.userNames = map[string]string{}
+	}
+	m.userNames[userID] = displayName
+	mention := "<@" + userID
+	for _, s := range m.summaries {
+		if s.ParentUserID == userID || s.LastReplyBy == userID || strings.Contains(s.ParentText, mention) {
+			m.dirty()
+			return
+		}
+	}
+}
+
 // stringMapsEqual reports whether two map[string]string have identical
 // contents. Used by SetUserNames and SetChannelNames to short-circuit Set*
 // calls with unchanged input so the App-level panel cache can hit on idle
