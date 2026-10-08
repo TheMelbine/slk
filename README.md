@@ -1,4 +1,21 @@
-# slk
+# slk-plus
+
+A fork of [slk](https://github.com/gammons/slk) by Grant Ammons with changes I wanted for daily use. Everything below the next section is the upstream README and still applies.
+
+## What slk-plus adds
+
+- Per-channel notification levels from Slack are honored (all new messages / mentions only / nothing), and `m` cycles them without leaving the terminal
+- `f` follows or unfollows a thread, with desktop notifications for replies in followed threads
+- `s` stars or unstars a channel
+- Avatars in the thread panel, on the thread line (participants + "last reply N ago") and in the `@` mention picker
+- Hotkeys work on a Cyrillic keyboard layout, and pickers and the command line accept non-ASCII input
+- Emoji and links render inside alert attachments
+- Theme color `"none"` for a transparent background, author name colors in themes
+- Kitty graphics fixes for Ghostty, workspace rail hidden with a single workspace
+
+Build from source: `go build -o bin/slk ./cmd/slk`. Keybindings: [wiki/Keybindings.md](wiki/Keybindings.md).
+
+---
 
 > **A blazingly fast Slack TUI.**
 > Keyboard-driven, beautifully themed, and under 20MB. One static binary. No Electron required.
@@ -121,4 +138,4 @@ slk talks to Slack via the same internal browser protocol the official web clien
 
 ## License
 
-[MIT](LICENSE) © Grant Ammons
+[MIT](LICENSE) © Grant Ammons. slk-plus keeps the upstream license; the original work is his, the additions above are mine.
