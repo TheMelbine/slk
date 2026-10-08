@@ -36,12 +36,18 @@ var thickLeftBorder = lipgloss.Border{Left: "▌"}
 // This shape mirrors internal/ui/messages.viewEntry exactly; keeping them in
 // lockstep means scroll and selection logic can be kept in sync.
 type viewEntry struct {
-	linesNormal      []string
-	linesSelected    []string
-	linesPlain       []messages.PlainLine
-	height           int
-	replyIdx         int
-	contentColOffset int
+	linesNormal   []string
+	linesSelected []string
+	// linesSelectedShort is the selected variant with the short
+	// timestamp, shown while a text selection exists. Built on demand by
+	// selectedLines from shortSrc, the unmodified content, which is empty
+	// when the selected variant carries no long timestamp.
+	linesSelectedShort []string
+	shortSrc           string
+	linesPlain         []messages.PlainLine
+	height             int
+	replyIdx           int
+	contentColOffset   int
 
 	// flushes are per-frame side effects (kitty image upload escapes)
 	// returned by imgrender.Renderer.RenderBlock for inline image
@@ -136,6 +142,7 @@ type Model struct {
 	// View-level cache -- bordered content ready for viewport
 	viewContent       string
 	viewSelected      int
+	viewHasSelection  bool
 	viewWidth         int
 	viewHeight        int
 	viewCacheValid    bool
@@ -724,24 +731,22 @@ func (m *Model) invalidateAuthors() {
 // PatchUserName updates the in-memory userNames map (used for @mention
 // rendering) and overwrites the UserName field on the parent message
 // and every cached reply authored by userID. Always invalidates the
-// render cache after a map change so mentions of <@userID> in other
-// authors' text re-resolve. Idempotent: no-op when the name is
-// unchanged.
+// render cache so mentions of <@userID> in other authors' text
+// re-resolve.
 //
-// Mirrors messages.Model.PatchUserName. Used by the async user-
-// resolution path: history fetchers stash MessageItem.UserName =
-// m.UserID for unknown authors. When the resolution returns
-// asynchronously, the App calls PatchUserName to replace the
-// placeholders live without re-fetching the thread.
+// Mirrors messages.Model.PatchUserName, including why it always
+// applies: the map is normally the App's, shared by every pane and
+// already holding the name by the time this pane is patched. Used by
+// the async user-resolution path: history fetchers stash
+// MessageItem.UserName = m.UserID for unknown authors. When the
+// resolution returns asynchronously, the App calls PatchUserName to
+// replace the placeholders live without re-fetching the thread.
 func (m *Model) PatchUserName(userID, displayName string) {
 	if userID == "" {
 		return
 	}
 	if m.userNames == nil {
 		m.userNames = map[string]string{}
-	}
-	if m.userNames[userID] == displayName {
-		return
 	}
 	m.userNames[userID] = displayName
 	// The render cache stores rows with their mentions already resolved
@@ -1124,6 +1129,43 @@ func (m *Model) ClearSelection() {
 // pinned-on-screen post-drag.
 func (m *Model) HasSelection() bool { return m.hasSelection }
 
+// selectedLines returns the lines to draw for the selected reply e: the
+// long-timestamp variant, or the short one while a text selection exists.
+// The drag overlay splices linesPlain, which holds the short form, into
+// the displayed row by column; the long header would come out garbled.
+// Mirrors messages.Model.selectedLines.
+//
+// The short variant is memoised into e, which must point into m.cache.
+func (m *Model) selectedLines(e *viewEntry, width int) []string {
+	if !m.hasSelection || e.shortSrc == "" {
+		return e.linesSelected
+	}
+	if e.linesSelectedShort == nil {
+		short := m.selectedVariant(e.shortSrc, width, m.borderSelectStyle())
+		if len(short) != len(e.linesSelected) {
+			return e.linesSelected // unreachable: variants share a height
+		}
+		e.linesSelectedShort = short
+	}
+	return e.linesSelectedShort
+}
+
+// borderSelectStyle is the thick, tinted left border of the selected reply.
+func (m *Model) borderSelectStyle() lipgloss.Style {
+	return lipgloss.NewStyle().BorderStyle(thickLeftBorder).BorderLeft(true).
+		BorderForeground(styles.SelectionBorderColor(m.focused)).
+		BorderBackground(styles.SelectionTintColor(m.focused)).
+		Background(styles.SelectionTintColor(m.focused))
+}
+
+// selectedVariant renders content r as the selected reply: the selection
+// tint repainted over inner spans, filled to the row width, then the
+// selection border. Split on "\n". Mirrors messages.Model.selectedVariant.
+func (m *Model) selectedVariant(r string, width int, borderSelect lipgloss.Style) []string {
+	fill := lipgloss.NewStyle().Background(styles.SelectionTintColor(m.focused)).Width(width - 1)
+	return strings.Split(borderSelect.Render(fill.Render(messages.RepaintBgToSelectionTint(r, m.focused))), "\n")
+}
+
 // ScrollHintForDrag returns -1 if the cursor is within 1 row of the top
 // edge of the scrolling content, +1 if within 1 row of the bottom, else 0.
 // The incoming viewportY is pane-local (0 == top of panel content, just
@@ -1440,7 +1482,19 @@ func (m *Model) View(height, width int) string {
 	// lifecycle adds complexity; reply flushes and hit rects ARE captured
 	// in the per-reply loop below.
 	parentIsSelected := m.selected == parentSelected
-	parentContent, _, _ := m.renderThreadMessage(m.parent, width, m.userNames, m.channelNames, parentIsSelected)
+	parentContent, _, _, parentHeader, parentHeaderBudget := m.renderThreadMessage(m.parent, width, m.userNames, m.channelNames, parentIsSelected)
+	// Replies only get a day divider when their day differs from the
+	// parent's, so the parent header carries its own date; otherwise a
+	// thread whose first replies share the parent's day shows no date.
+	// Before m.parentEntry, so the plain mirror (copy, drag highlight)
+	// matches what is drawn. Skipped when the header would not fit, and
+	// for a summary-built parent that has no time yet.
+	if !parentIsSelected && m.parent.Timestamp != "" {
+		if date := messages.DateFromTS(m.parent.TS); date != "" {
+			dated := messages.FormatShortDate(date) + ", " + m.parent.Timestamp
+			parentContent = messages.ReplaceHeaderTimestamp(parentContent, parentHeader, m.parent.Timestamp, dated, parentHeaderBudget)
+		}
+	}
 	m.parentEntry = viewEntry{
 		linesPlain:       messages.PlainLines(parentContent),
 		height:           lipgloss.Height(parentContent),
@@ -1451,6 +1505,11 @@ func (m *Model) View(height, width int) string {
 	// left border + tint when the cursor sits on the parent, invisible
 	// border otherwise so the parent's width matches the reply rows.
 	if parentIsSelected {
+		// After m.parentEntry, so its plain mirror keeps the short form.
+		// Skipped while a text selection exists; see selectedLines.
+		if !m.hasSelection {
+			parentContent = messages.SelectedHeader(parentContent, parentHeader, m.parent.TS, m.parent.Timestamp, parentHeaderBudget)
+		}
 		// Same repaint as the per-reply selected variant: inner spans
 		// paint the theme bg (or none, on a transparent theme), which
 		// would punch holes in the tint.
@@ -1557,10 +1616,7 @@ func (m *Model) View(height, width int) string {
 		// every visible reply on every j/k.
 		borderFill := lipgloss.NewStyle().Background(styles.Background)
 		borderInvis := styles.InvisibleLeftBorder()
-		borderSelect := lipgloss.NewStyle().BorderStyle(thickLeftBorder).BorderLeft(true).
-			BorderForeground(styles.SelectionBorderColor(m.focused)).
-			BorderBackground(styles.SelectionTintColor(m.focused)).
-			Background(styles.SelectionTintColor(m.focused))
+		borderSelect := m.borderSelectStyle()
 		for i, reply := range m.replies {
 			// renderThreadMessage's last arg ("isSelected") drives reaction-
 			// nav pill highlighting (lines 1040, 1049): when reaction nav
@@ -1571,7 +1627,9 @@ func (m *Model) View(height, width int) string {
 			// so the cache rebuilds whenever the highlighted index changes.
 			// This matches the messages-pane convention
 			// (internal/ui/messages/model.go:1050).
-			rendered, attachFlushes, reactHits := m.renderThreadMessage(reply, width, m.userNames, m.channelNames, i == m.selected)
+			rendered, attachFlushes, reactHits, header, headerBudget := m.renderThreadMessage(reply, width, m.userNames, m.channelNames, i == m.selected)
+			// Selected variant only; linesNormal / linesPlain keep the short form.
+			renderedSel := messages.SelectedHeader(rendered, header, reply.TS, reply.Timestamp, headerBudget)
 			// Two filled variants — see internal/ui/messages/model.go for the
 			// rationale. Without per-variant fills, the trailing whitespace of
 			// every wrapped line shows the wrong bg and the tint stops at the
@@ -1582,18 +1640,19 @@ func (m *Model) View(height, width int) string {
 			// escapes (Username, Timestamp, MessageText, RenderSlackMarkdown's
 			// reset-reapplications) with the tint color so the tint reaches
 			// every cell of the row, not just the trailing whitespace.
-			renderedTinted := messages.RepaintBgToSelectionTint(rendered, m.focused)
-			selectedFill := lipgloss.NewStyle().
-				Background(styles.SelectionTintColor(m.focused)).
-				Width(width - 1).
-				Render(renderedTinted)
 			normal := borderInvis.Render(filledNormal)
-			selected := borderSelect.Render(selectedFill)
 			linesN := strings.Split(normal, "\n")
-			linesS := strings.Split(selected, "\n")
+			linesS := m.selectedVariant(renderedSel, width, borderSelect)
+			// The short-timestamp selected variant is built on demand
+			// from shortSrc (see selectedLines).
+			var shortSrc string
+			if renderedSel != rendered {
+				shortSrc = rendered
+			}
 			m.cache = append(m.cache, viewEntry{
 				linesNormal:   linesN,
 				linesSelected: linesS,
+				shortSrc:      shortSrc,
 				// linesPlain mirrors the UNBORDERED, UNTINTED content (filledNormal)
 				// so the thick left-border column is NOT present in plain text and
 				// never bleeds into clipboard output via SelectionText. The
@@ -1620,13 +1679,18 @@ func (m *Model) View(height, width int) string {
 	// Check if view-level cache (bordered content) can be reused
 	var viewPerfReason string
 	var viewPerfStart time.Time
-	viewPerfRebuild := !m.viewCacheValid || m.viewSelected != m.selected || m.viewWidth != width || m.viewHeight != replyAreaHeight
+	// viewHasSelection is part of the key because the selected row swaps
+	// between its long- and short-timestamp variants when a text
+	// selection starts or ends (see selectedLines).
+	viewPerfRebuild := !m.viewCacheValid || m.viewSelected != m.selected || m.viewHasSelection != m.hasSelection || m.viewWidth != width || m.viewHeight != replyAreaHeight
 	if viewPerfRebuild && debuglog.Enabled() {
 		switch {
 		case !m.viewCacheValid:
 			viewPerfReason = "invalidated"
 		case m.viewSelected != m.selected:
 			viewPerfReason = fmt.Sprintf("selected-changed %d->%d", m.viewSelected, m.selected)
+		case m.viewHasSelection != m.hasSelection:
+			viewPerfReason = fmt.Sprintf("text-selection-changed %v->%v", m.viewHasSelection, m.hasSelection)
 		case m.viewWidth != width:
 			viewPerfReason = fmt.Sprintf("width-changed %d->%d", m.viewWidth, width)
 		default:
@@ -1748,7 +1812,7 @@ func (m *Model) View(height, width int) string {
 			var lines []string
 			if i == m.selected {
 				startLine = currentLine
-				lines = e.linesSelected
+				lines = m.selectedLines(&m.cache[i], width)
 			} else {
 				lines = e.linesNormal
 			}
@@ -1791,6 +1855,7 @@ func (m *Model) View(height, width int) string {
 
 		m.viewContent = strings.Join(allRows, "\n")
 		m.viewSelected = m.selected
+		m.viewHasSelection = m.hasSelection
 		m.viewWidth = width
 		m.viewHeight = replyAreaHeight
 		m.selectedStartLine = startLine
@@ -1973,7 +2038,7 @@ func (m *Model) blockkitContext(msg messages.MessageItem, userNames, channelName
 	}
 }
 
-func (m *Model) renderThreadMessage(msg messages.MessageItem, width int, userNames map[string]string, channelNames map[string]string, isSelected bool) (string, []func(io.Writer) error, []reactionEntryHit) {
+func (m *Model) renderThreadMessage(msg messages.MessageItem, width int, userNames map[string]string, channelNames map[string]string, isSelected bool) (string, []func(io.Writer) error, []reactionEntryHit, string, int) {
 	line := styles.Username(msg.UserID, m.coloredUsernames).Render(msg.UserName) + messages.AuthorStatusSuffix(m.userStatuses, msg.UserID, time.Now()) + lipgloss.NewStyle().Background(styles.Background).Render("  ") + styles.Timestamp.Render(msg.Timestamp)
 
 	// Avatar column on the left, same layout as the channel pane.
@@ -2245,5 +2310,8 @@ func (m *Model) renderThreadMessage(msg messages.MessageItem, width int, userNam
 	if avatarStr != "" {
 		content = messages.PlaceAvatarBeside(avatarStr, content)
 	}
-	return content, flushes, reactionHits
+	// Header width budget for messages.SelectedHeader: the body's wrap
+	// width, capped at the columns the row really has (width-1 after the
+	// thick left border) because contentWidth is floored at 20.
+	return content, flushes, reactionHits, line, min(contentWidth, width-1)
 }

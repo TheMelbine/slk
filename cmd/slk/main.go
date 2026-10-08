@@ -81,8 +81,12 @@ func main() {
 		case "--help", "-h", "help":
 			printHelp()
 			return
-		case "--add-workspace":
-			if err := addWorkspace(); err != nil {
+		case "--add-workspace", "--browser":
+			browser, err := addWorkspaceArgs(os.Args[1:])
+			if err == nil {
+				err = addWorkspace(browser)
+			}
+			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
 			}
@@ -95,6 +99,12 @@ func main() {
 			return
 		case "--list-workspaces":
 			if err := listWorkspaces(); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+			os.Exit(0)
+		case "export":
+			if err := exportChannel(os.Args[2:]); err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
 			}
@@ -175,9 +185,13 @@ func printHelp() {
 Usage:
   slk                    Launch the TUI
   slk --add-workspace     Add a Slack workspace (interactive)
+  slk --add-workspace --browser
+                          Add one from a browser session (no desktop app)
   slk --remove-workspace  Remove a configured workspace (interactive)
   slk --list-workspaces   List configured workspaces (TeamID, Slug, Name)
   slk --dump-sections     Dump raw users.channelSections.list JSON (diagnostic)
+  slk export [flags]      Export a channel's messages and threads to Markdown
+                          (see 'slk export --help')
   slk --version          Print version and exit
   slk --help             Show this help
 
@@ -271,7 +285,7 @@ func run() error {
 	tokens, err := tokenStore.List()
 	if err != nil || len(tokens) == 0 {
 		// No workspaces configured -- launch onboarding automatically
-		if err := addWorkspace(); err != nil {
+		if err := addWorkspace(false); err != nil {
 			return err
 		}
 		// Reload tokens after onboarding
@@ -598,29 +612,10 @@ func run() error {
 	// thousands of users) wrote ~100MB of kitty graphics APC escape
 	// data to stdout at startup and produced a multi-minute hang on
 	// terminals that decode kitty graphics (kitty, ghostty).
-	lazyAvatar := func(get func(string) string) func(userID string) string {
-		return func(userID string) string {
-			if rendered := get(userID); rendered != "" {
-				return rendered
-			}
-			// Cache miss: trigger a lazy Preload using the URL the
-			// workspace recorded at connect time (or that resolveUser
-			// filled in). No router-active = pre-workspace-ready render;
-			// AvatarReadyMsg will invalidate once the avatar lands.
-			wctx := router.Active()
-			if wctx == nil || wctx.AvatarURLs == nil {
-				return ""
-			}
-			if v, ok := wctx.AvatarURLs.Load(userID); ok {
-				if url, ok := v.(string); ok && url != "" {
-					avatarCache.Preload(userID, url)
-				}
-			}
-			return ""
-		}
-	}
 	app.SetAvatarService(core.NewAvatarServiceWithMini(
-		lazyAvatar(avatarCache.Get), lazyAvatar(avatarCache.GetMini)))
+		func(userID string) string { return lazyAvatar(router.Active(), avatarCache, userID) },
+		func(userID string) string { return lazyMiniAvatar(router.Active(), avatarCache, userID) },
+	))
 
 	// Wire theme switcher: dispatch to the appropriate saver based on scope.
 	saveTheme := func(name string, scope core.ThemeScope) {
@@ -716,6 +711,10 @@ func run() error {
 	// workspace-scoped values (Client, UserNames, ...) into local
 	// vars BEFORE the `go func()` so they are not affected by a
 	// concurrent router.Set during the goroutine's lifetime.
+	// The rail's thread half, kept off the UI goroutine (see
+	// railThreadsCache). Its notifier is installed once p exists.
+	railThreads := newRailThreadsCache(railThreadsUnread(db))
+
 	wireCallbacks := func(router *workspaceRouter) {
 		channelReadStates := func() map[string]cache.ReadState {
 			wctx := router.Active()
@@ -736,7 +735,7 @@ func run() error {
 				log.Printf("Warning: UnreadChannels: %v", err)
 				return nil
 			}
-			return railUnreadWorkspaces(unread, railTeamIDs, router.ByID, railThreadsUnread(db))
+			return railUnreadWorkspaces(unread, railTeamIDs, router.ByID, railThreads.Unread)
 		}
 		app.SetUnreadService(core.NewUnreadService(channelReadStates, unreadWorkspaces))
 
@@ -983,7 +982,7 @@ func run() error {
 					return ui.MessageSendFailedMsg{ChannelID: chIDStr, Reason: err.Error()}
 				}
 				userName := "you"
-				if resolved, ok := userNames[client.UserID()]; ok {
+				if resolved, ok := userNames.Get(client.UserID()); ok {
 					userName = resolved
 				}
 				return ui.MessageSentMsg{
@@ -1217,7 +1216,7 @@ func run() error {
 					return ui.ThreadReplySendFailedMsg{ChannelID: chIDStr, ThreadTS: threadTSStr, Reason: err.Error()}
 				}
 				userName := "you"
-				if resolved, ok := userNames[client.UserID()]; ok {
+				if resolved, ok := userNames.Get(client.UserID()); ok {
 					userName = resolved
 				}
 				// Broadcast replies surface in the parent channel feed as
@@ -1401,15 +1400,20 @@ func run() error {
 		channels := withPeerStatuses(wctx.Channels, statuses)
 
 		snap := workspacesStore.Snapshot()
+		// switchNames goes to the UI, which owns (and writes) it from
+		// then on; only switchSeq is kept for AfterSwitch.
+		switchNames, switchSeq := wctx.UserNames.SnapshotForUI()
 		return ui.WorkspaceSwitchedMsg{
-			TeamID:           wctx.TeamID,
-			TeamName:         wctx.TeamName,
-			Domain:           wctx.Client.TeamSubdomain(),
-			Theme:            snap.ResolveTheme(teamID),
-			SidebarWidth:     snap.ResolveWidth(teamID),
-			Channels:         channels,
-			FinderItems:      wctx.FinderItems,
-			UserNames:        wctx.UserNames,
+			TeamID:       wctx.TeamID,
+			TeamName:     wctx.TeamName,
+			Domain:       wctx.Client.TeamSubdomain(),
+			Theme:        snap.ResolveTheme(teamID),
+			SidebarWidth: snap.ResolveWidth(teamID),
+			Channels:     channels,
+			FinderItems:  wctx.FinderItems,
+			// A private copy: the UI must never share a map with the
+			// engine's goroutines (see userNameStore).
+			UserNames:        switchNames,
 			UserStatuses:     statuses,
 			ExternalUsers:    external,
 			UserID:           wctx.UserID,
@@ -1423,6 +1427,14 @@ func run() error {
 				ctx, cancel := context.WithTimeout(context.Background(), dndRefreshTimeout)
 				defer cancel()
 				wctx.PeerStatus.RefreshDND(ctx, workspacePresenceIDs(wctx))
+				return nil
+			},
+			// Reports every name this workspace learned since
+			// the switch snapshot was taken (including while it was inactive,
+			// when its UserResolvedMsgs were dropped), then keeps
+			// reporting. Run by the reducer after the switch applies.
+			AfterSwitch: func() tea.Msg {
+				wctx.UserNames.NotifyFrom(switchSeq, uiNameNotifier(wctx.TeamID, p.Send))
 				return nil
 			},
 		}
@@ -1462,6 +1474,12 @@ func run() error {
 	// a serialized pass-through for non-sixel frames (no marker present)
 	// and the sixel paint site for marked frames.
 	p = tea.NewProgram(app, tea.WithOutput(terminalOutput))
+
+	// A changed thread-unread answer re-runs the rail refresh, which
+	// then reads the new answer from the cache.
+	railThreads.SetNotify(func(teamID string) {
+		p.Send(ui.ReadStateChangedMsg{WorkspaceID: teamID})
+	})
 
 	// Now that `p` exists, re-install the ImageContext with a real
 	// SendMsg callback so the prefetcher can dispatch ImageReadyMsg
@@ -1608,15 +1626,20 @@ func run() error {
 
 			readyStatuses := cachedPeerStatuses(db, wctx.TeamID)
 			wctx.PeerStatus.SeedHuddles(readyStatuses)
+			// readyNames goes to the UI, which owns (and writes) it from
+			// then on; only readySeq is kept for NotifyFrom below.
+			readyNames, readySeq := wctx.UserNames.SnapshotForUI()
 			p.Send(ui.WorkspaceReadyMsg{
-				TeamID:           wctx.TeamID,
-				TeamName:         wctx.TeamName,
-				Domain:           wctx.Client.TeamSubdomain(),
-				Theme:            cfgSnap.ResolveTheme(wctx.TeamID),
-				SidebarWidth:     cfgSnap.ResolveWidth(wctx.TeamID),
-				Channels:         wctx.Channels,
-				FinderItems:      wctx.FinderItems,
-				UserNames:        wctx.UserNames,
+				TeamID:       wctx.TeamID,
+				TeamName:     wctx.TeamName,
+				Domain:       wctx.Client.TeamSubdomain(),
+				Theme:        cfgSnap.ResolveTheme(wctx.TeamID),
+				SidebarWidth: cfgSnap.ResolveWidth(wctx.TeamID),
+				Channels:     wctx.Channels,
+				FinderItems:  wctx.FinderItems,
+				// A private copy: the UI must never share a map with
+				// the engine's goroutines (see userNameStore).
+				UserNames:        readyNames,
 				UserStatuses:     readyStatuses,
 				ExternalUsers:    external,
 				UserID:           wctx.UserID,
@@ -1626,6 +1649,11 @@ func run() error {
 				InitialActive:    isInitial,
 				LastChannelID:    mostRecentlyVisitedChannel(wctx.LastVisitedByChannel),
 			})
+			// From here on every name the store learns reaches the UI.
+			// p.Send above has returned, so the Update loop has taken
+			// the Ready message; anything the notifier sends is
+			// processed after it.
+			wctx.UserNames.NotifyFrom(readySeq, uiNameNotifier(wctx.TeamID, p.Send))
 
 			// Fetch the workspace's custom emoji in the background. When
 			// done, a follow-up message makes rendering and the emoji
