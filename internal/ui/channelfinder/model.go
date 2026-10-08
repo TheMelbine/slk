@@ -349,7 +349,7 @@ func (m *Model) HandleKey(keyStr string) *ChannelResult {
 
 	case "backspace":
 		if len(m.query) > 0 {
-			m.query = m.query[:len(m.query)-1]
+			m.query = text.TrimLastRune(m.query)
 			m.selected = 0
 			m.filter()
 		}
@@ -357,7 +357,7 @@ func (m *Model) HandleKey(keyStr string) *ChannelResult {
 	}
 
 	// If it's a single printable rune, add to query
-	if len(keyStr) == 1 && keyStr[0] >= 32 && keyStr[0] <= 126 {
+	if text.IsQueryRune(keyStr) {
 		m.query += keyStr
 		m.selected = 0
 		m.filter()

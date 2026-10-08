@@ -8,6 +8,8 @@
 // is responsible for dispatching the conversations.open call.
 package newmessagepicker
 
+import "github.com/gammons/slk/internal/text"
+
 // MaxRecipients is Slack's hard cap on the number of OTHER users in
 // a multi-person direct message (MPIM). Slack itself caps total
 // MPIM participants at 9, so up to 8 other users plus self.
@@ -197,7 +199,7 @@ func (m *Model) HandleKey(keyStr string) *Result {
 	}
 
 	// Single printable ASCII rune -> append to query.
-	if len(keyStr) == 1 && keyStr[0] >= 33 && keyStr[0] <= 126 {
+	if text.IsQueryRune(keyStr) {
 		m.query += keyStr
 		m.highlight = 0
 		m.filter()
@@ -238,7 +240,7 @@ func (m *Model) toggleHighlightedSelection() {
 // reaching for the mouse.
 func (m *Model) handleBackspace() {
 	if len(m.query) > 0 {
-		m.query = m.query[:len(m.query)-1]
+		m.query = text.TrimLastRune(m.query)
 		m.highlight = 0
 		m.filter()
 		return

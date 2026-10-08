@@ -520,48 +520,25 @@ func TestChannelFinderModeKeys(t *testing.T) {
 			},
 		},
 		{
-			// BUG?: channelfinder's printable filter is BYTE-based --
-			// `len(keyStr) == 1 && keyStr[0] >= 32 && keyStr[0] <= 126`
-			// (channelfinder/model.go:311) -- byte-for-byte the same
-			// predicate as mode_command.go:57, which this commit already
-			// flags via TestCommandMode_NonASCIIRuneIsDropped. "e" with
-			// an acute accent is two bytes, fails the length test, and
-			// never reaches the query: a channel whose name carries
-			// non-ASCII characters cannot be searched by them.
-			//
-			// The two sites are materially identical, coupling included:
-			// channelfinder's backspace at :303 slices `m.query` by
-			// BYTE, exactly as mode_command.go:49 slices `a.cmdline`.
-			// Widening either filter alone would let the matching
-			// backspace cut a multi-byte rune in half. Neither is
-			// fixable in isolation -- which is why both are recorded
-			// rather than fixed.
-			//
-			// searchresults is NOT affected: its default arm counts
-			// RUNES (searchresults/model.go:180).
-			//
-			// Tracked as https://github.com/gammons/slk/issues/187,
-			// which covers both sites. WHEN THAT BUG IS FIXED: the rune
-			// reaches the query, so re-pin Query() to "é", expect the
-			// list to re-filter (0 items against this fixture) and a
-			// non-nil reschedule cmd.
-			name:     "a non-ASCII rune never reaches the query: the printable filter is byte-based",
+			// Any printable character reaches the query, so a channel
+			// whose name carries non-ASCII characters is searchable by
+			// them. text.Fold strips the accent, so "é" matches every
+			// name with an "e" in this fixture; the list re-filters and
+			// the server search is rescheduled.
+			name:     "a non-ASCII rune reaches the query",
 			opts:     channelFinderOpts(),
 			setup:    assertFinderOpen,
 			key:      keyPress('é'),
 			wantMode: ModeChannelFinder,
 			assert: func(t *testing.T, a *App, cmd tea.Cmd) {
-				if got := a.channelFinder.Query(); got != "" {
-					t.Errorf("finder query = %q, want empty: the byte-based filter should have dropped it", got)
+				if got := a.channelFinder.Query(); got != "é" {
+					t.Errorf("finder query = %q, want é", got)
 				}
-				if got := len(a.channelFinder.FilteredItems()); got != 4 {
-					t.Errorf("%d filtered items, want 4 (the list never re-filtered)", got)
+				if got := len(a.channelFinder.FilteredItems()); got != 3 {
+					t.Errorf("%d filtered items, want 3 (the list re-filtered on the folded query)", got)
 				}
-				// No query change means no reschedule, which is the
-				// second observable that the rune was dropped rather
-				// than accepted-then-filtered-to-nothing.
-				if cmd != nil {
-					t.Errorf("cmd = %T, want nil", cmd)
+				if cmd == nil {
+					t.Error("cmd = nil, want the server search rescheduled")
 				}
 			},
 		},

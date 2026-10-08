@@ -955,3 +955,25 @@ func TestSyntheticItemMatchesByName(t *testing.T) {
 			m.items[m.filtered[0]].Name)
 	}
 }
+
+func TestCyrillicQuery(t *testing.T) {
+	m := New()
+	m.SetItems([]core.ChannelFinderItem{
+		{ID: "C1", Name: "общий", Type: "channel", Joined: true},
+		{ID: "C2", Name: "general", Type: "channel", Joined: true},
+	})
+	m.Open()
+	for _, k := range []string{"о", "б", "щ"} {
+		m.HandleKey(k)
+	}
+	if m.Query() != "общ" {
+		t.Fatalf("query = %q, want общ", m.Query())
+	}
+	if len(m.filtered) != 1 || m.items[m.filtered[0]].ID != "C1" {
+		t.Errorf("expected only C1 to match, got %v", m.filtered)
+	}
+	m.HandleKey("backspace")
+	if m.Query() != "об" {
+		t.Errorf("backspace should drop one character, query = %q", m.Query())
+	}
+}
