@@ -14,6 +14,9 @@ import (
 const (
 	avatarCols = 4
 	avatarRows = 2
+	// miniCols mirrors avatar.MiniCols: the one-row tile drawn on thread
+	// lines and in the mention picker.
+	miniCols = 2
 )
 
 var avatarPalette = []color.RGBA{
@@ -33,6 +36,15 @@ func renderAvatar(userID, name string) string {
 	top := fmt.Sprintf("\x1b[1;38;2;255;255;255;48;2;%d;%d;%dm %s \x1b[0m", c.R, c.G, c.B, initials(name))
 	bottom := fmt.Sprintf("\x1b[38;2;%d;%d;%dm%s\x1b[0m", c.R, c.G, c.B, strings.Repeat("▀", avatarCols))
 	return top + "\n" + bottom
+}
+
+// renderMiniAvatar is the one-row tile: the initials on the user's
+// colour, miniCols wide.
+func renderMiniAvatar(userID, name string) string {
+	h := fnv.New32a()
+	h.Write([]byte(userID))
+	c := avatarPalette[h.Sum32()%uint32(len(avatarPalette))]
+	return fmt.Sprintf("\x1b[1;38;2;255;255;255;48;2;%d;%d;%dm%s\x1b[0m", c.R, c.G, c.B, initials(name))
 }
 
 // initials returns exactly two cells: the first letters of the first two

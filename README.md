@@ -4,6 +4,8 @@ A fork of [slk](https://github.com/gammons/slk) by Grant Ammons with changes I w
 
 ## What slk-plus adds
 
+![slk-plus demo: cycling a channel's notification level, starring it, following a thread, avatars in the mention picker](docs/assets/demo/plus.gif)
+
 - Per-channel notification levels from Slack are honored (all new messages / mentions only / nothing), and `m` cycles them without leaving the terminal
 - `f` follows or unfollows a thread, with desktop notifications for replies in followed threads
 - `s` stars or unstars a channel
@@ -13,7 +15,7 @@ A fork of [slk](https://github.com/gammons/slk) by Grant Ammons with changes I w
 - Theme color `"none"` for a transparent background, author name colors in themes
 - Kitty graphics fixes for Ghostty, workspace rail hidden with a single workspace
 
-Build from source: `go build -o bin/slk ./cmd/slk`. Keybindings: [wiki/Keybindings.md](wiki/Keybindings.md).
+Build from source: `go build -o bin/slk ./cmd/slk`. Keybindings: [wiki/Keybindings.md](wiki/Keybindings.md). The clip above is `slk --demo plus` recorded with `vhs docs/assets/demo/plus.tape`.
 
 ---
 

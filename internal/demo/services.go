@@ -81,6 +81,15 @@ func (d *Demo) services() services {
 			Lookup: func(channelID ids.ChannelID) (string, string, bool) {
 				return w.lookup(string(channelID))
 			},
+			ToggleStar: func(channelID ids.ChannelID) core.Msg {
+				ch := string(channelID)
+				starred := w.toggleStar(ch)
+				return ui.ChannelStarToggledMsg{ChannelID: ch, Starred: starred}
+			},
+			CycleNotifyLevel: func(channelID ids.ChannelID) core.Msg {
+				ch := string(channelID)
+				return ui.ChannelNotifyLevelChangedMsg{ChannelID: ch, Level: w.cycleNotifyLevel(ch)}
+			},
 		}),
 		threads: core.NewThreadService(core.ThreadServiceFuncs{
 			Fetch: func(channelID ids.ChannelID, threadTS ids.ThreadTS) core.Msg {
@@ -104,6 +113,10 @@ func (d *Demo) services() services {
 			},
 			ListFetch: func(teamID ids.TeamID) core.Msg {
 				return ui.ThreadsListLoadedMsg{TeamID: string(teamID), Summaries: w.threadSummaries(string(teamID)), SubscriptionsAvailable: true}
+			},
+			ToggleFollow: func(channelID ids.ChannelID, threadTS ids.ThreadTS) core.Msg {
+				ch, ts := string(channelID), string(threadTS)
+				return ui.ThreadFollowToggledMsg{TeamID: w.teamOf(ch), ChannelID: ch, ThreadTS: ts, Following: w.toggleFollow(ch, ts)}
 			},
 		}),
 		messages: core.NewMessageService(core.MessageServiceFuncs{
@@ -180,7 +193,9 @@ func (d *Demo) services() services {
 				UserStatuses: s.statuses, UserID: s.selfID,
 			}
 		}),
-		avatars:  core.NewAvatarService(func(userID string) string { return d.avatars[userID] }),
+		avatars: core.NewAvatarServiceWithMini(
+			func(userID string) string { return d.avatars[userID] },
+			func(userID string) string { return d.minis[userID] }),
 		settings: core.NewSettingsService(nil, nil),
 		presence: core.NewPresenceService(nil, nil),
 		profiles: core.NewProfileService(core.ProfileServiceFuncs{

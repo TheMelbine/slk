@@ -97,6 +97,12 @@ type World struct {
 	teams  []*team
 	byID   map[string]*channel
 	active string
+
+	// What the slk-plus keys toggle. Nothing else in the demo reads
+	// these; they feed the toasts.
+	starred      map[string]bool   // channel ID -> starred
+	notifyLevels map[string]string // channel ID -> Slack desktop level
+	followed     map[string]bool   // "channel/threadTS" -> followed
 }
 
 func newWorld(specs []teamSpec, now time.Time, clock func() time.Time) *World {
@@ -638,4 +644,49 @@ func (w *World) snapshot(teamID string) (teamSnapshot, bool) {
 		return t.snapshot(), true
 	}
 	return teamSnapshot{}, false
+}
+
+// toggleStar flips the channel's starred flag and reports the new state.
+// The demo has no sidebar sections to move the channel between, so the
+// flag only drives the toast.
+func (w *World) toggleStar(ch string) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.starred == nil {
+		w.starred = map[string]bool{}
+	}
+	w.starred[ch] = !w.starred[ch]
+	return w.starred[ch]
+}
+
+// cycleNotifyLevel moves the channel's notification level one step along
+// everything → mentions_dms → nothing, as the real client does through
+// Slack, and returns the new level.
+func (w *World) cycleNotifyLevel(ch string) string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.notifyLevels == nil {
+		w.notifyLevels = map[string]string{}
+	}
+	next := "mentions_dms"
+	switch w.notifyLevels[ch] {
+	case "mentions_dms":
+		next = "nothing"
+	case "nothing":
+		next = "everything"
+	}
+	w.notifyLevels[ch] = next
+	return next
+}
+
+// toggleFollow flips the thread's followed flag and reports the new state.
+func (w *World) toggleFollow(ch, ts string) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.followed == nil {
+		w.followed = map[string]bool{}
+	}
+	key := ch + "/" + ts
+	w.followed[key] = !w.followed[key]
+	return w.followed[key]
 }

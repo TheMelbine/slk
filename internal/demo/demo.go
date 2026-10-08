@@ -23,6 +23,7 @@ type Demo struct {
 	world    *World
 	director *Director
 	avatars  map[string]string // user ID -> rendered tile; read-only after newDemo
+	minis    map[string]string // user ID -> one-row tile; read-only after newDemo
 	images   imageStore
 
 	// proto and cellPx are how Install renders images: half-block at
@@ -51,6 +52,7 @@ func newDemo(scenario string, now time.Time, clock func() time.Time) (*Demo, err
 		world:    w,
 		director: newDirector(w, rules),
 		avatars:  map[string]string{},
+		minis:    map[string]string{},
 		images:   images,
 		proto:    imgpkg.ProtoHalfBlock,
 		cellPx:   image.Pt(8, 16),
@@ -58,6 +60,7 @@ func newDemo(scenario string, now time.Time, clock func() time.Time) (*Demo, err
 	for _, s := range w.snapshots() {
 		for id, name := range s.userNames {
 			d.avatars[id] = renderAvatar(id, name)
+			d.minis[id] = renderMiniAvatar(id, name)
 		}
 	}
 	return d, nil

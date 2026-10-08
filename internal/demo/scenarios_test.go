@@ -130,7 +130,7 @@ func TestRulesForUnknownScenarioListsTheChoices(t *testing.T) {
 			t.Errorf("error %q does not offer %q", err, name)
 		}
 	}
-	if got := ScenarioNames(); !slices.Equal(got, []string{"compose", "hero", "reactions", "themes", "threads", "workspaces"}) {
+	if got := ScenarioNames(); !slices.Equal(got, []string{"compose", "hero", "plus", "reactions", "themes", "threads", "workspaces"}) {
 		t.Errorf("ScenarioNames = %v", got)
 	}
 }

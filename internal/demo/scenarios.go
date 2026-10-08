@@ -15,6 +15,7 @@ const msec = time.Millisecond
 var scenarios = map[string]func() []Rule{
 	"compose":    func() []Rule { return []Rule{answerTheUser()} },
 	"hero":       heroRules,
+	"plus":       threadRules,
 	"reactions":  reactionRules,
 	"themes":     func() []Rule { return nil },
 	"threads":    threadRules,

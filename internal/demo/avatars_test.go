@@ -56,3 +56,16 @@ func TestInitials(t *testing.T) {
 		}
 	}
 }
+
+func TestMiniAvatarIsOneRowOfMiniCols(t *testing.T) {
+	if miniCols != avatar.MiniCols {
+		t.Fatalf("demo mini avatars are %d wide, real ones %d", miniCols, avatar.MiniCols)
+	}
+	got := renderMiniAvatar("U1", "Sam Okafor")
+	if strings.Contains(got, "\n") {
+		t.Fatalf("mini avatar has more than one row: %q", got)
+	}
+	if w := ansi.StringWidth(got); w != miniCols {
+		t.Errorf("mini avatar is %d cells wide, want %d: %q", w, miniCols, got)
+	}
+}
