@@ -73,17 +73,28 @@ func TestUserResolved_ReachesThreadPanel(t *testing.T) {
 
 // Panes apply every PatchUserName they're given, so the App must drop a
 // resolution that changes nothing; names are re-resolved in bursts.
+// Every pane shows U9, so each would re-render if the patch reached it:
+// the Threads and Activity lists only bump for a user their cards show.
 func TestUserResolved_UnchangedNameIsNoOp(t *testing.T) {
-	a := newTestApp(t)
+	a := newTestApp(t, withThreadsView([]cache.ThreadSummary{{
+		ChannelID: "C1", ThreadTS: "1.0", ParentUserID: "U9", ParentText: "hello", ParentTS: "1.0",
+	}}))
+	a.activityView.SetItems([]core.ActivityItem{{
+		Key: "k1", Type: "at_user", FeedTS: "1.0", ChannelID: "C1", TS: "1.0", AuthorID: "U9",
+	}})
 	a.SetUserNames(map[string]string{"U9": "zed"})
 	resolved := unresolved("1.0")
 	resolved.UserName = "zed"
 	a.messagepane.SetMessages([]messages.MessageItem{resolved})
-	msgV, threadV, listV := a.messagepane.Version(), a.threadPanel.Version(), a.threadsView.Version()
+	a.threadPanel.SetThread(resolved, []messages.MessageItem{resolved}, "C1", "1.0")
+	versions := func() [4]int64 {
+		return [4]int64{a.messagepane.Version(), a.threadPanel.Version(), a.threadsView.Version(), a.activityView.Version()}
+	}
+	before := versions()
 
 	_, _ = a.Update(UserResolvedMsg{UserID: "U9", DisplayName: "zed"})
-	if a.messagepane.Version() != msgV || a.threadPanel.Version() != threadV || a.threadsView.Version() != listV {
-		t.Error("an unchanged name re-rendered a pane")
+	if after := versions(); after != before {
+		t.Errorf("an unchanged name re-rendered a pane: versions [messages thread threads activity] %v -> %v", before, after)
 	}
 }
 
