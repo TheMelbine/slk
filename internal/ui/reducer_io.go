@@ -128,6 +128,12 @@ var reduceIO reducerFunc = func(a *App, msg tea.Msg) (tea.Cmd, bool) {
 	case statusbar.ChannelStarFailedMsg:
 		return toastWithClear(a, "Star failed: "+truncateReason(m.Reason, 40), 3*time.Second), true
 
+	case statusbar.ChannelNotifyLevelMsg:
+		return toastWithClear(a, "Notifications: "+notifyLevelLabel(m.Level), 2*time.Second), true
+
+	case statusbar.ChannelNotifyLevelFailedMsg:
+		return toastWithClear(a, "Notification change failed: "+truncateReason(m.Reason, 40), 3*time.Second), true
+
 	case statusbar.ThreadFollowedMsg:
 		if m.Following {
 			return toastWithClear(a, "Following thread", 2*time.Second), true
@@ -325,4 +331,18 @@ func reducePaste(a *App, m tea.PasteMsg) tea.Cmd {
 	var cmd tea.Cmd
 	a.compose, cmd = a.compose.Update(m)
 	return cmd
+}
+
+// notifyLevelLabel turns Slack's level name into the wording of its
+// notification dialog.
+func notifyLevelLabel(level string) string {
+	switch level {
+	case "everything":
+		return "all new messages"
+	case "mentions_dms":
+		return "mentions only"
+	case "nothing":
+		return "nothing"
+	}
+	return level
 }

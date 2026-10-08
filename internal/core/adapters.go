@@ -256,6 +256,7 @@ type ChannelServiceFuncs struct {
 	OpenConversation func(userIDs []string, requestID uint64) Cmd
 	SearchRemote     func(query string) []ChannelFinderItem
 	ToggleStar       func(channelID ids.ChannelID) Msg
+	CycleNotifyLevel func(channelID ids.ChannelID) Msg
 }
 
 // NewChannelService builds a ChannelService from a
@@ -329,6 +330,13 @@ func (c channelAdapter) ToggleStar(channelID ids.ChannelID) Msg {
 		return nil
 	}
 	return c.fns.ToggleStar(channelID)
+}
+
+func (c channelAdapter) CycleNotifyLevel(channelID ids.ChannelID) Msg {
+	if c.fns.CycleNotifyLevel == nil {
+		return nil
+	}
+	return c.fns.CycleNotifyLevel(channelID)
 }
 
 func (c channelAdapter) RecordVisit(channelID ids.ChannelID) {

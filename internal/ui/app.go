@@ -4139,22 +4139,40 @@ func (a *App) markUnreadOfSelected() tea.Cmd {
 	return nil
 }
 
-// toggleStarOfSelected stars or unstars a channel: the one under the
-// sidebar cursor when the sidebar has focus, the open one otherwise.
-func (a *App) toggleStarOfSelected() tea.Cmd {
-	channelID := a.activeChannelID
+// selectedChannelID is the channel a channel-level action targets: the
+// one under the sidebar cursor when the sidebar has focus, the open one
+// otherwise. Empty when there is none.
+func (a *App) selectedChannelID() string {
 	if a.focusedPanel == PanelSidebar {
 		item, ok := a.sidebar.SelectedItem()
 		if !ok {
-			return nil
+			return ""
 		}
-		channelID = item.ID
+		return item.ID
 	}
+	return a.activeChannelID
+}
+
+// toggleStarOfSelected stars or unstars the selected channel.
+func (a *App) toggleStarOfSelected() tea.Cmd {
+	channelID := a.selectedChannelID()
 	if channelID == "" {
 		return nil
 	}
 	return func() tea.Msg {
 		return ToggleChannelStarMsg{ChannelID: channelID}
+	}
+}
+
+// cycleNotifyLevelOfSelected moves the selected channel's Slack
+// notification level one step along the cycle.
+func (a *App) cycleNotifyLevelOfSelected() tea.Cmd {
+	channelID := a.selectedChannelID()
+	if channelID == "" {
+		return nil
+	}
+	return func() tea.Msg {
+		return CycleChannelNotifyLevelMsg{ChannelID: channelID}
 	}
 }
 

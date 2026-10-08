@@ -40,6 +40,7 @@
 | `D` | Normal (message) | Delete your own message (with confirmation) |
 | `U` | Normal (message) | Mark selected message and everything newer as unread |
 | `s` | Normal | Star or unstar a channel: the one under the sidebar cursor, or the open one |
+| `m` | Normal | Cycle a channel's Slack notification level: all new messages → mentions only → nothing (same channel rule as `s`) |
 | `f` | Normal (message) | Follow or unfollow the thread of the selected message (Slack's "Get notified about new replies") |
 | `S` | Normal (thread) | Save thread to markdown file (`~/.local/share/slk/exports/` or `$XDG_DATA_HOME/slk/exports/`) |
 | `y` | Normal (message) | Copy message text |

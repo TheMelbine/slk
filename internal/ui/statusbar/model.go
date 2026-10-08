@@ -446,6 +446,13 @@ type ChannelStarredMsg struct{ Starred bool }
 // ChannelStarFailedMsg is delivered when starring or unstarring failed.
 type ChannelStarFailedMsg struct{ Reason string }
 
+// ChannelNotifyLevelMsg is delivered when the user changed a channel's
+// Slack notification level. Level is Slack's name for the new level.
+type ChannelNotifyLevelMsg struct{ Level string }
+
+// ChannelNotifyLevelFailedMsg is delivered when changing the level failed.
+type ChannelNotifyLevelFailedMsg struct{ Reason string }
+
 // ThreadFollowedMsg is delivered when the user followed (Following) or
 // unfollowed a thread.
 type ThreadFollowedMsg struct{ Following bool }

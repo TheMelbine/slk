@@ -46,6 +46,7 @@ type KeyMap struct {
 	MarkUnread          key.Binding
 	FollowThread        key.Binding
 	StarChannel         key.Binding
+	NotifyLevel         key.Binding
 	NextUnread          key.Binding
 	PrevUnread          key.Binding
 	ActivityView        key.Binding
@@ -117,6 +118,7 @@ func DefaultKeyMap() KeyMap {
 		MarkUnread:      key.NewBinding(key.WithKeys("U"), key.WithHelp("U", "mark unread")),
 		FollowThread:    key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "follow / unfollow thread")),
 		StarChannel:     key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "star / unstar channel")),
+		NotifyLevel:     key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "cycle channel notifications")),
 		NextUnread:      key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "next unread channel")),
 		PrevUnread:      key.NewBinding(key.WithKeys("A"), key.WithHelp("A", "prev unread channel")),
 		ActivityView:    key.NewBinding(key.WithKeys("ctrl+a"), key.WithHelp("ctrl+a", "open activity")),

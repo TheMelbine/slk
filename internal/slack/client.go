@@ -1447,6 +1447,58 @@ func (c *Client) GetChannelNotificationPrefs(ctx context.Context) (map[string]Ch
 	return merged, nil
 }
 
+// SetChannelNotificationLevel sets the channel's desktop notification
+// level in Slack through users.prefs.setNotifications, the call the
+// browser client makes from a channel's notification dialog. level is
+// one of NotifyEverything, NotifyMentions or NotifyNothing; the method
+// offers no way back to "use my default" (every value tried for that
+// answers internal_error). Returns the full all_notifications_prefs
+// blob the server echoes back, JSON-encoded, ready for
+// ParseAllNotificationsPrefs.
+//
+// users.prefs.setNotifications is undocumented; may break if Slack
+// changes the API.
+func (c *Client) SetChannelNotificationLevel(ctx context.Context, channelID, level string) (string, error) {
+	if channelID == "" || level == "" {
+		return "", fmt.Errorf("SetChannelNotificationLevel: empty channel id or level")
+	}
+	body, err := c.postForm(ctx, "users.prefs.setNotifications", url.Values{
+		"global":     {"false"},
+		"channel_id": {channelID},
+		"name":       {"desktop"},
+		"value":      {level},
+	})
+	if err != nil {
+		return "", err
+	}
+	var parsed struct {
+		OK    bool            `json:"ok"`
+		Error string          `json:"error"`
+		Prefs json.RawMessage `json:"all_notifications_prefs"`
+	}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return "", fmt.Errorf("parsing users.prefs.setNotifications response: %w (body=%q)", err, truncateForLog(body))
+	}
+	if !parsed.OK {
+		return "", fmt.Errorf("users.prefs.setNotifications: %s", parsed.Error)
+	}
+	return string(parsed.Prefs), nil
+}
+
+// NextNotifyLevel returns the level after current in the cycle
+// everything → mentions_dms → nothing → everything. An unset level
+// (the workspace default) counts as everything.
+func NextNotifyLevel(current string) string {
+	switch current {
+	case NotifyMentions:
+		return NotifyNothing
+	case NotifyNothing:
+		return NotifyEverything
+	default:
+		return NotifyMentions
+	}
+}
+
 // MergeChannelNotificationPrefs combines the legacy comma-separated
 // muted_channels pref with the all_notifications_prefs blob. Both are
 // merged rather than either winning: a channel in the legacy list is

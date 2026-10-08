@@ -246,6 +246,11 @@ type ChannelService interface {
 	// sidebar sections. Returns a Msg (typically ChannelStarToggledMsg).
 	ToggleStar(channelID ids.ChannelID) Msg
 
+	// CycleNotifyLevel moves the channel's Slack notification level one
+	// step along everything → mentions → nothing → everything. Returns
+	// a Msg (typically ChannelNotifyLevelChangedMsg).
+	CycleNotifyLevel(channelID ids.ChannelID) Msg
+
 	// SearchRemote asks the server which channels match query,
 	// including ones the user has not joined, and blocks until it
 	// answers. Callers run it from a Cmd, debounced — see

@@ -2701,6 +2701,25 @@ func TestToggleStarOfSelected_OpenChannel(t *testing.T) {
 	}
 }
 
+func TestCycleNotifyLevelOfSelected(t *testing.T) {
+	app := NewApp()
+	app.activeChannelID = "C1"
+	app.focusedPanel = PanelMessages
+
+	cmd := app.cycleNotifyLevelOfSelected()
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd")
+	}
+	if got, ok := cmd().(CycleChannelNotifyLevelMsg); !ok || got.ChannelID != "C1" {
+		t.Errorf("got %+v, want CycleChannelNotifyLevelMsg for C1", got)
+	}
+
+	app.activeChannelID = ""
+	if app.cycleNotifyLevelOfSelected() != nil {
+		t.Error("no open channel: expected nil cmd")
+	}
+}
+
 func TestToggleFollowOfSelected_ChannelPane(t *testing.T) {
 	app := NewApp()
 	app.activeChannelID = "C1"

@@ -909,6 +909,13 @@ func run() error {
 				}
 				return toggleChannelStar(wctx, string(channelID))
 			},
+			CycleNotifyLevel: func(channelID ids.ChannelID) core.Msg {
+				wctx := router.Active()
+				if wctx == nil || wctx.Client == nil {
+					return nil
+				}
+				return cycleChannelNotifyLevel(wctx, string(channelID))
+			},
 			Join: func(channelID ids.ChannelID, channelName string) core.Msg {
 				chIDStr := string(channelID)
 				wctx := router.Active()

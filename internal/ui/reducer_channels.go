@@ -30,6 +30,9 @@
 //	                                moves the channel on the
 //	                                SectionsRefreshedMsg the service
 //	                                sends.
+//	CycleChannelNotifyLevelMsg    - user pressed m: call
+//	                                ChannelService.CycleNotifyLevel.
+//	ChannelNotifyLevelChangedMsg  - level result: toast.
 //	ChannelJoinedMsg              - finder-driven join succeeded:
 //	                                add to sidebar + open it.
 //	ChannelJoinFailedMsg          - finder-driven join failed:
@@ -231,6 +234,28 @@ var reduceChannels reducerFunc = func(a *App, msg tea.Msg) (tea.Cmd, bool) {
 		starred := m.Starred
 		return func() tea.Msg {
 			return statusbar.ChannelStarredMsg{Starred: starred}
+		}, true
+
+	case CycleChannelNotifyLevelMsg:
+		channels := a.channels
+		if channels == nil {
+			return nil, true
+		}
+		chID := ids.ChannelID(m.ChannelID)
+		return func() tea.Msg {
+			return channels.CycleNotifyLevel(chID)
+		}, true
+
+	case ChannelNotifyLevelChangedMsg:
+		if m.Err != nil {
+			reason := m.Err.Error()
+			return func() tea.Msg {
+				return statusbar.ChannelNotifyLevelFailedMsg{Reason: reason}
+			}, true
+		}
+		level := m.Level
+		return func() tea.Msg {
+			return statusbar.ChannelNotifyLevelMsg{Level: level}
 		}, true
 
 	case ChannelJoinedMsg:

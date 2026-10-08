@@ -3405,3 +3405,61 @@ func TestParseAllNotificationsPrefs_DesktopLevels(t *testing.T) {
 		t.Error("bad JSON should yield nil")
 	}
 }
+
+func TestSetChannelNotificationLevel_PostsFormAndReturnsPrefs(t *testing.T) {
+	respBody := `{"ok":true,"all_notifications_prefs":{"channels":{"C1":{"desktop":"nothing"}},"global":{}}}`
+	var gotPath string
+	var gotForm url.Values
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		if err := r.ParseForm(); err != nil {
+			t.Errorf("ParseForm: %v", err)
+		}
+		gotForm = r.PostForm
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(respBody))
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv)
+	prefs, err := c.SetChannelNotificationLevel(context.Background(), "C1", NotifyNothing)
+	if err != nil {
+		t.Fatalf("SetChannelNotificationLevel: %v", err)
+	}
+	if !strings.HasSuffix(gotPath, "/users.prefs.setNotifications") {
+		t.Errorf("path: got %q", gotPath)
+	}
+	for k, want := range map[string]string{"global": "false", "channel_id": "C1", "name": "desktop", "value": "nothing"} {
+		if got := gotForm.Get(k); got != want {
+			t.Errorf("form %s: got %q, want %q", k, got, want)
+		}
+	}
+	if got := ParseAllNotificationsPrefs(prefs)["C1"].Desktop; got != "nothing" {
+		t.Errorf("echoed prefs: C1 desktop = %q, want nothing", got)
+	}
+
+	if _, err := c.SetChannelNotificationLevel(context.Background(), "", NotifyNothing); err == nil {
+		t.Error("empty channel id should fail")
+	}
+}
+
+func TestSetChannelNotificationLevel_ApiError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":false,"error":"internal_error"}`))
+	}))
+	defer srv.Close()
+	c := newTestClient(srv)
+	if _, err := c.SetChannelNotificationLevel(context.Background(), "C1", NotifyMentions); err == nil || !strings.Contains(err.Error(), "internal_error") {
+		t.Errorf("err = %v, want internal_error", err)
+	}
+}
+
+func TestNextNotifyLevel(t *testing.T) {
+	cases := map[string]string{"": NotifyMentions, NotifyEverything: NotifyMentions, NotifyMentions: NotifyNothing, NotifyNothing: NotifyEverything}
+	for in, want := range cases {
+		if got := NextNotifyLevel(in); got != want {
+			t.Errorf("NextNotifyLevel(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

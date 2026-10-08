@@ -728,6 +728,22 @@ type ChannelStarToggledMsg struct {
 	Err       error
 }
 
+// CycleChannelNotifyLevelMsg requests the App to move ChannelID's
+// notification level one step along the cycle.
+type CycleChannelNotifyLevelMsg struct {
+	ChannelID string
+}
+
+// ChannelNotifyLevelChangedMsg carries the result of
+// ChannelService.CycleNotifyLevel. Level is the level after the call
+// ("everything", "mentions_dms", "nothing"); it is meaningless when Err
+// is set.
+type ChannelNotifyLevelChangedMsg struct {
+	ChannelID string
+	Level     string
+	Err       error
+}
+
 // previewLoadedMsg is dispatched after a preview thumb has been fetched.
 // The receiver constructs (or, when isCycle is set, swaps the image of)
 // an imgpkg.Preview and stores it on the App.
