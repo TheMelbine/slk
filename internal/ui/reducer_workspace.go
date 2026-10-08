@@ -122,10 +122,23 @@ var reduceWorkspace reducerFunc = func(a *App, msg tea.Msg) (tea.Cmd, bool) {
 		if m.TeamID != a.activeTeamID {
 			return nil, true
 		}
+		// SetUserNames hands every pane this one map, so check and
+		// write it here, once: a pane can't tell from the map whether
+		// it has applied a name another pane already wrote. Each pane's
+		// PatchUserName always applies.
+		if a.userNames == nil {
+			a.userNames = map[string]string{}
+		}
+		if cur, ok := a.userNames[m.UserID]; ok && cur == m.DisplayName {
+			return nil, true
+		}
+		a.userNames[m.UserID] = m.DisplayName
 		for _, mp := range a.allWinModels() {
 			mp.PatchUserName(m.UserID, m.DisplayName)
 		}
 		a.threadPanel.PatchUserName(m.UserID, m.DisplayName)
+		a.threadsView.PatchUserName(m.UserID, m.DisplayName)
+		a.activityView.PatchUserName(m.UserID, m.DisplayName)
 		// IsBot affects DM channel-type classification, but that's
 		// orchestrated by DMNameResolvedMsg; this handler is only
 		// the in-history name patch. IsBot is carried for forward
