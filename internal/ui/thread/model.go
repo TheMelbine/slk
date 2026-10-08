@@ -1485,6 +1485,18 @@ func (m *Model) View(height, width int) string {
 	// in the per-reply loop below.
 	parentIsSelected := m.selected == parentSelected
 	parentContent, _, _, parentHeader, parentHeaderBudget := m.renderThreadMessage(m.parent, width, m.userNames, m.channelNames, parentIsSelected)
+	// Replies only get a day divider when their day differs from the
+	// parent's, so the parent header carries its own date; otherwise a
+	// thread whose first replies share the parent's day shows no date.
+	// Before m.parentEntry, so the plain mirror (copy, drag highlight)
+	// matches what is drawn. Skipped when the header would not fit, and
+	// for a summary-built parent that has no time yet.
+	if !parentIsSelected && m.parent.Timestamp != "" {
+		if date := messages.DateFromTS(m.parent.TS); date != "" {
+			dated := messages.FormatShortDate(date) + ", " + m.parent.Timestamp
+			parentContent = messages.ReplaceHeaderTimestamp(parentContent, parentHeader, m.parent.Timestamp, dated, parentHeaderBudget)
+		}
+	}
 	m.parentEntry = viewEntry{
 		linesPlain:       messages.PlainLines(parentContent),
 		height:           lipgloss.Height(parentContent),

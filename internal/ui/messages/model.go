@@ -3693,6 +3693,25 @@ func SetNowFunc(fn func() time.Time) {
 	nowFunc = fn
 }
 
+// FormatShortDate turns a "2006-01-02" date string into a compact
+// label for a message header: "Today", "Yesterday", a weekday within
+// the last week, "Jan 2" earlier this year, or "Jan 2, 2006" before
+// that. The thread pane prefixes the parent's time with it, because
+// the parent is the only row there with no day divider above it.
+func FormatShortDate(dateStr string) string {
+	d, err := time.Parse("2006-01-02", dateStr)
+	if err != nil {
+		return dateStr
+	}
+	if label := FormatDateSeparator(dateStr); !strings.Contains(label, ",") {
+		return label
+	}
+	if d.Year() == nowFunc().Year() {
+		return d.Format("Jan 2")
+	}
+	return d.Format("Jan 2, 2006")
+}
+
 // FormatDateSeparator turns a "2006-01-02" date string into the
 // human-readable label used in day-divider rows ("Today", "Yesterday",
 // a weekday name within the last week, or a fully-qualified date).
