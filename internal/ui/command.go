@@ -11,6 +11,7 @@ package ui
 import (
 	"strings"
 	"time"
+	"unicode"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -29,6 +30,9 @@ var commands = map[string]commandFunc{
 	"sp":       cmdSplit,
 	"vsp":      cmdVSplit,
 	"q":        cmdCloseWindow,
+	"q!":       cmdQuit,
+	"qa":       cmdQuit,
+	"qa!":      cmdQuit,
 	"only":     cmdOnlyWindow,
 	"on":       cmdOnlyWindow,
 	"activity": cmdActivity,
@@ -47,8 +51,24 @@ func cmdActivity(a *App, _ []string) tea.Cmd {
 func cmdSplit(a *App, _ []string) tea.Cmd  { return a.splitWindow(wintree.SplitStacked) }
 func cmdVSplit(a *App, _ []string) tea.Cmd { return a.splitWindow(wintree.SplitSideBySide) }
 
-// cmdCloseWindow closes the focused window (never quits the app).
-func cmdCloseWindow(a *App, _ []string) tea.Cmd { return a.closeWindow() }
+// cmdCloseWindow closes the focused window. In the last window it
+// quits, as in vim.
+func cmdCloseWindow(a *App, args []string) tea.Cmd {
+	if a.wins.Len() <= 1 {
+		return cmdQuit(a, args)
+	}
+	return a.closeWindow()
+}
+
+// cmdQuit quits slk without the confirm prompt: a typed :q is
+// deliberate in a way a stray q or ctrl+c is not. An upload in progress
+// still blocks it.
+func cmdQuit(a *App, _ []string) tea.Cmd {
+	if a.compose.Uploading() || a.threadCompose.Uploading() {
+		return a.uploadToastCmd("Upload in progress", 2*time.Second)
+	}
+	return tea.Quit
+}
 
 // cmdOnlyWindow closes all other windows.
 func cmdOnlyWindow(a *App, _ []string) tea.Cmd {
@@ -74,7 +94,24 @@ func executeCommand(a *App, line string) tea.Cmd {
 	}
 	fn, ok := commands[fields[0]]
 	if !ok {
+		// Typed on a Russian layout: ":й" is ":q".
+		fn, ok = commands[latinCommand(fields[0])]
+	}
+	if !ok {
 		return toastWithClear(a, "Unknown command: "+fields[0], 2*time.Second)
 	}
 	return fn(a, fields[1:])
+}
+
+// latinCommand maps the letters of a command typed on a ЙЦУКЕН layout
+// to the US keys at the same positions.
+func latinCommand(name string) string {
+	var b strings.Builder
+	for _, r := range name {
+		if l, ok := cyrillicToLatin[unicode.ToLower(r)]; ok {
+			r = l
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }

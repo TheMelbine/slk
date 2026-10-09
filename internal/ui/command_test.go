@@ -3,6 +3,10 @@ package ui
 import (
 	"strings"
 	"testing"
+
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/gammons/slk/internal/ui/wintree"
 )
 
 func TestExecuteCommand_EmptyIsNoop(t *testing.T) {
@@ -39,5 +43,34 @@ func TestExecuteCommand_TrimsAndIgnoresArgs(t *testing.T) {
 	_ = executeCommand(a, "  ws   extra  ")
 	if a.mode != ModeWorkspaceFinder {
 		t.Fatalf("mode = %v, want ModeWorkspaceFinder", a.mode)
+	}
+}
+
+func TestExecuteCommand_QInLastWindowQuits(t *testing.T) {
+	for _, line := range []string{"q", "q!", "qa", "й", "йф"} {
+		a := newWideTestApp(t)
+		cmd := executeCommand(a, line)
+		if cmd == nil {
+			t.Fatalf(":%s returned no cmd", line)
+		}
+		if _, ok := cmd().(tea.QuitMsg); !ok {
+			t.Errorf(":%s did not quit", line)
+		}
+	}
+}
+
+func TestExecuteCommand_QClosesSplitFirst(t *testing.T) {
+	a := newWideTestApp(t)
+	_ = a.splitWindow(wintree.SplitSideBySide)
+	if a.wins.Len() != 2 {
+		t.Fatalf("precondition: Len = %d, want 2", a.wins.Len())
+	}
+	if cmd := executeCommand(a, "q"); cmd != nil {
+		if _, ok := cmd().(tea.QuitMsg); ok {
+			t.Fatal(":q quit with two windows open")
+		}
+	}
+	if a.wins.Len() != 1 {
+		t.Errorf("Len = %d after :q, want 1", a.wins.Len())
 	}
 }

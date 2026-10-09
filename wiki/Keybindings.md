@@ -58,5 +58,6 @@
 | `q` | Normal | Quit (with confirmation) |
 | `Q` | Normal | Quit immediately |
 | `Ctrl+c` | Any | Quit (with confirmation) |
+| `:q` | Normal | Close the focused window; in the last one, quit without confirmation. `:q!` / `:qa` always quit. On a Russian layout `:й` works too |
 
 Custom keybinding overrides are on the roadmap — see [[Tradeoffs and Non-Goals|Tradeoffs-and-Non-Goals]].
