@@ -257,7 +257,11 @@ func (h *rtmEventHandler) OnMessage(channelID, userID, ts, text, threadTS, subty
 				if h.avatarFile != nil {
 					image = h.avatarFile(authorID)
 				}
-				if err := h.notifier.NotifyWithImage(title, body, image); err != nil {
+				click := notifyClick{Team: h.workspaceID, Channel: channelID, TS: ts}
+				if threadTS != ts {
+					click.ThreadTS = threadTS
+				}
+				if err := h.notifier.Send(notify.Message{Title: title, Body: body, Image: image, Click: click.encode()}); err != nil {
 					debuglog.Notify("notification failed: %v", err)
 				}
 			}()

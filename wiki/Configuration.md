@@ -42,7 +42,8 @@ quiet_hours = "22:00-08:00"   # planned
 # macOS: run macos/notifier/build.sh once to install slk-notifier.app into
 # ~/Applications. slk then posts notifications through it: the app's icon
 # (Slack's, if Slack.app is installed) on the left, the sender's avatar on the
-# right, and a click brings back the Ghostty tab slk runs in.
+# right, and a click brings back the Ghostty tab slk runs in and opens the
+# message (or its thread), switching workspace if needed.
 
 # status_command (optional): run on every unread-state change (a message arrives
 # or a channel is read) so an external surface can mirror slk's unread state.

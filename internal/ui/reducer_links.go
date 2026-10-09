@@ -64,11 +64,66 @@ func (p *pendingLinkNav) wrapThreadLoad(cmd tea.Cmd, authoritative bool, loads i
 }
 
 var reduceLinks reducerFunc = func(a *App, msg tea.Msg) (tea.Cmd, bool) {
-	m, ok := msg.(OpenLinkMsg)
-	if !ok {
-		return nil, false
+	switch m := msg.(type) {
+	case OpenLinkMsg:
+		return a.routeLink(m.URL), true
+	case NotificationClickedMsg:
+		return a.openNotification(m), true
 	}
-	return a.routeLink(m.URL), true
+	return nil, false
+}
+
+// openNotification jumps to the message behind a clicked desktop
+// notification, switching workspace first when it came from another
+// one. The switch restores lastChannelByTeam, so pointing that at the
+// target channel makes the switch land there, and the pending nav,
+// keyed to the target team, then selects the message.
+func (a *App) openNotification(m NotificationClickedMsg) tea.Cmd {
+	if m.ChannelID == "" {
+		return nil
+	}
+	switch a.mode {
+	case ModeNormal:
+	case ModeInsert:
+		a.SetMode(ModeNormal)
+		a.compose.Blur()
+		a.threadCompose.Blur()
+	default:
+		// A dialog is open; leave it to the user rather than tearing
+		// down its state behind their back.
+		return nil
+	}
+	team := m.TeamID
+	if team == "" {
+		team = a.activeTeamID
+	}
+	a.pendingLinkNav = &pendingLinkNav{
+		channelID: m.ChannelID,
+		messageTS: m.TS,
+		threadTS:  m.ThreadTS,
+		teamID:    team,
+	}
+	if team != a.activeTeamID {
+		if a.workspaceSvc == nil || a.compose.Uploading() || a.threadCompose.Uploading() {
+			a.pendingLinkNav = nil
+			return nil
+		}
+		a.lastChannelByTeam[team] = m.ChannelID
+		switcher := a.workspaceSvc
+		return func() tea.Msg { return switcher.Switch(team) }
+	}
+	if m.ChannelID == a.activeChannelID {
+		return a.completePendingLinkNav(a.activeChannelID, true)
+	}
+	name, chType, found := a.channels.Lookup(ids.ChannelID(m.ChannelID))
+	if !found {
+		a.pendingLinkNav = nil
+		return nil
+	}
+	a.sidebar.SelectByID(m.ChannelID)
+	return func() tea.Msg {
+		return ChannelSelectedMsg{ID: m.ChannelID, Name: name, Type: chType}
+	}
 }
 
 // routeLink decides between in-app navigation and the browser.

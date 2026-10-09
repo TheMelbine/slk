@@ -531,3 +531,64 @@ func TestCompletePendingNav_OffBufferTriggersFetchAround(t *testing.T) {
 		t.Fatal("pendingLinkNav not cleared")
 	}
 }
+
+func TestNotificationClicked_OtherChannel_OpensIt(t *testing.T) {
+	app, _ := linkTestApp(t)
+	app.activeChannelID = "CELSEWHERE"
+	_, cmd := app.Update(NotificationClickedMsg{TeamID: "T1", ChannelID: "C054JFCBN69", TS: "1.000001"})
+	var sel *ChannelSelectedMsg
+	for _, m := range drainCmd(cmd) {
+		if cs, ok := m.(ChannelSelectedMsg); ok {
+			sel = &cs
+		}
+	}
+	if sel == nil || sel.ID != "C054JFCBN69" {
+		t.Fatalf("ChannelSelectedMsg = %+v", sel)
+	}
+	if p := app.pendingLinkNav; p == nil || p.messageTS != "1.000001" || p.teamID != "T1" {
+		t.Errorf("pendingLinkNav = %+v", p)
+	}
+}
+
+func TestNotificationClicked_ThreadReply_OpensThread(t *testing.T) {
+	app, _ := linkTestApp(t)
+	app.activeChannelID = "C054JFCBN69"
+	_, cmd := app.Update(NotificationClickedMsg{ChannelID: "C054JFCBN69", TS: "2.000002", ThreadTS: "1.000001"})
+	drainCmd(cmd)
+	if !app.threadVisible {
+		t.Error("thread panel not opened")
+	}
+}
+
+func TestNotificationClicked_OtherWorkspace_SwitchesToChannel(t *testing.T) {
+	app, _ := linkTestApp(t)
+	var switched string
+	app.setWorkspaceSwitcherForTest(func(teamID string) tea.Msg {
+		switched = teamID
+		return nil
+	})
+	_, cmd := app.Update(NotificationClickedMsg{TeamID: "T2", ChannelID: "C2", TS: "1.000001"})
+	drainCmd(cmd)
+	if switched != "T2" {
+		t.Fatalf("switched to %q, want T2", switched)
+	}
+	if got := app.lastChannelByTeam["T2"]; got != "C2" {
+		t.Errorf("lastChannelByTeam[T2] = %q, want C2", got)
+	}
+	if p := app.pendingLinkNav; p == nil || p.channelID != "C2" || p.teamID != "T2" {
+		t.Errorf("pendingLinkNav = %+v", p)
+	}
+}
+
+func TestNotificationClicked_DialogOpen_LeavesItAlone(t *testing.T) {
+	app, _ := linkTestApp(t)
+	app.activeChannelID = "CELSEWHERE"
+	app.SetMode(ModeHelp)
+	_, cmd := app.Update(NotificationClickedMsg{ChannelID: "C054JFCBN69", TS: "1.000001"})
+	if msgs := drainCmd(cmd); len(msgs) != 0 {
+		t.Errorf("dispatched %#v with a dialog open", msgs)
+	}
+	if app.mode != ModeHelp || app.pendingLinkNav != nil {
+		t.Errorf("mode = %v, pendingLinkNav = %+v", app.mode, app.pendingLinkNav)
+	}
+}

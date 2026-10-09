@@ -1,12 +1,13 @@
 // slk-notifier posts one macOS notification for slk and exits.
 //
 //   slk-notifier --title T --body B [--image FILE] [--activate BUNDLE_ID]
-//                [--focus-title PREFIX]
+//                [--focus-title PREFIX] [--click-socket PATH --click DATA]
 //
 // The notification carries the app bundle's icon, and FILE (the sender's
 // avatar) as a thumbnail. A click relaunches the app with no arguments;
 // it then brings back the terminal named by --activate, and in Ghostty
-// the tab whose title starts with --focus-title.
+// the tab whose title starts with --focus-title. Then it writes DATA to
+// the unix socket PATH, where slk listens and opens the message.
 import AppKit
 import UserNotifications
 
@@ -32,6 +33,26 @@ func focusTerminal(bundleID: String, titlePrefix: String) {
     }
 }
 
+func sendClick(socketPath: String, data: String) {
+    let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+    guard fd >= 0 else { return }
+    defer { close(fd) }
+    var addr = sockaddr_un()
+    addr.sun_family = sa_family_t(AF_UNIX)
+    let path = Array(socketPath.utf8CString)
+    guard path.count <= MemoryLayout.size(ofValue: addr.sun_path) else { return }
+    withUnsafeMutableBytes(of: &addr.sun_path) { buf in
+        path.withUnsafeBytes { buf.copyMemory(from: $0) }
+    }
+    let ok = withUnsafePointer(to: &addr) {
+        $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+            connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
+        }
+    }
+    guard ok == 0 else { return }
+    _ = data.withCString { write(fd, $0, strlen($0)) }
+}
+
 final class Delegate: NSObject, UNUserNotificationCenterDelegate {
     func userNotificationCenter(_ c: UNUserNotificationCenter, willPresent n: UNNotification,
                                 withCompletionHandler h: @escaping (UNNotificationPresentationOptions) -> Void) {
@@ -43,6 +64,10 @@ final class Delegate: NSObject, UNUserNotificationCenterDelegate {
         let info = r.notification.request.content.userInfo
         if let app = info["activate"] as? String, !app.isEmpty {
             focusTerminal(bundleID: app, titlePrefix: info["focusTitle"] as? String ?? "")
+        }
+        if let sock = info["clickSocket"] as? String, let data = info["click"] as? String,
+           !sock.isEmpty, !data.isEmpty {
+            sendClick(socketPath: sock, data: data)
         }
         h()
         exit(0)
@@ -77,7 +102,12 @@ center.requestAuthorization(options: [.alert, .sound]) { granted, err in
     content.title = opts["title"] ?? ""
     content.body = opts["body"] ?? ""
     content.sound = .default
-    content.userInfo = ["activate": opts["activate"] ?? "", "focusTitle": opts["focus-title"] ?? ""]
+    content.userInfo = [
+        "activate": opts["activate"] ?? "",
+        "focusTitle": opts["focus-title"] ?? "",
+        "clickSocket": opts["click-socket"] ?? "",
+        "click": opts["click"] ?? "",
+    ]
     if let image = opts["image"], FileManager.default.fileExists(atPath: image) {
         // UNNotificationAttachment moves the file into its own store, so
         // hand it a copy and leave slk's image cache alone.

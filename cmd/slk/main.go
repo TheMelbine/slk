@@ -1475,6 +1475,18 @@ func run() error {
 	// and the sixel paint site for marked frames.
 	p = tea.NewProgram(app, tea.WithOutput(terminalOutput))
 
+	// Clicks on notifications posted through the macOS helper come
+	// back on this socket and open the message.
+	if notifier.HasHelper() {
+		path := notifyClickSocket()
+		if stop, err := listenNotifyClicks(path, p.Send); err != nil {
+			debuglog.Notify("notification click socket: %v", err)
+		} else {
+			defer stop()
+			notifier.SetClickSocket(path)
+		}
+	}
+
 	// A changed thread-unread answer re-runs the rail refresh, which
 	// then reads the new answer from the cache.
 	railThreads.SetNotify(func(teamID string) {

@@ -591,6 +591,16 @@ type MessageDeletedMsg struct {
 // picker modal.
 type OpenLinkMsg struct{ URL string }
 
+// NotificationClickedMsg reports a click on a desktop notification slk
+// posted. cmd/slk receives it from the macOS notifier helper; the App
+// opens the message the notification was about.
+type NotificationClickedMsg struct {
+	TeamID    string
+	ChannelID string
+	TS        string
+	ThreadTS  string // non-empty for a thread reply: open the thread panel
+}
+
 // DownloadFileMsg requests download + OS-open of a file attachment.
 // Dispatched by the `d` keybinding (directly for single-file messages)
 // and by the picker modal for multi-file messages. Handled by

@@ -7,7 +7,7 @@ A fork of [slk](https://github.com/gammons/slk) by Grant Ammons with changes I w
 ![slk-plus demo: cycling a channel's notification level, starring it, following a thread, avatars in the mention picker](docs/assets/demo/plus.gif)
 
 - Per-channel notification levels from Slack are honored (all new messages / mentions only / nothing), and `m` cycles them without leaving the terminal
-- macOS notifications show the sender's avatar and a click returns to slk's Ghostty tab (`macos/notifier/build.sh` installs the helper app)
+- macOS notifications show the sender's avatar and a click returns to slk's Ghostty tab and opens that message (`macos/notifier/build.sh` installs the helper app)
 - `f` follows or unfollows a thread, with desktop notifications for replies in followed threads
 - `s` stars or unstars a channel
 - Avatars in the thread panel, on the thread line (participants + "last reply N ago") and in the `@` mention picker

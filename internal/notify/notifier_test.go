@@ -384,7 +384,7 @@ func TestShouldNotify_ChannelLevel(t *testing.T) {
 	}
 }
 
-func TestNotifyWithImage_RunsHelper(t *testing.T) {
+func TestSend_RunsHelper(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "args")
 	helper := filepath.Join(dir, "slk-notifier")
@@ -394,24 +394,25 @@ func TestNotifyWithImage_RunsHelper(t *testing.T) {
 	}
 	t.Setenv("__CFBundleIdentifier", "com.example.term")
 	n := &Notifier{enabled: true, helper: helper}
-	if err := n.NotifyWithImage("Alice", "hi", "/tmp/a.png"); err != nil {
-		t.Fatalf("NotifyWithImage: %v", err)
+	n.SetClickSocket("/tmp/s.sock")
+	if err := n.Send(Message{Title: "Alice", Body: "hi", Image: "/tmp/a.png", Click: "{}"}); err != nil {
+		t.Fatalf("Send: %v", err)
 	}
 	got, err := os.ReadFile(out)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "--title\nAlice\n--body\nhi\n--focus-title\nslk\n--image\n/tmp/a.png\n--activate\ncom.example.term\n"
+	want := "--title\nAlice\n--body\nhi\n--focus-title\nslk\n--image\n/tmp/a.png\n--activate\ncom.example.term\n--click-socket\n/tmp/s.sock\n--click\n{}\n"
 	if string(got) != want {
 		t.Errorf("helper args:\n%s\nwant:\n%s", got, want)
 	}
 }
 
-func TestNotifyWithImage_CommandSeesImage(t *testing.T) {
+func TestSend_CommandSeesImage(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "out")
 	n := New(true, "printf '%s' \"$SLK_IMAGE\" >"+out)
-	if err := n.NotifyWithImage("t", "b", "/tmp/a.png"); err != nil {
-		t.Fatalf("NotifyWithImage: %v", err)
+	if err := n.Send(Message{Title: "t", Body: "b", Image: "/tmp/a.png"}); err != nil {
+		t.Fatalf("Send: %v", err)
 	}
 	got, err := os.ReadFile(out)
 	if err != nil {
