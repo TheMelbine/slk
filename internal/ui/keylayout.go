@@ -133,3 +133,13 @@ func textEntryMode(m Mode) bool {
 	}
 	return true
 }
+
+// textEntry is textEntryMode for the current state: the cheatsheet takes
+// text only while its search is active, and is navigated with j/k
+// otherwise.
+func (a *App) textEntry() bool {
+	if a.mode == ModeHelp {
+		return a.help.IsSearching()
+	}
+	return textEntryMode(a.mode)
+}

@@ -81,3 +81,24 @@ func TestHandleKey_RussianDotOpensSearch(t *testing.T) {
 		t.Fatalf("mode = %v, want search", a.mode)
 	}
 }
+
+func TestHandleKey_RussianLayoutScrollsHelp(t *testing.T) {
+	a := newTestAppWithMessages(t)
+	a.SetMode(ModeNormal)
+	_ = a.handleKey(tea.KeyPressMsg{Code: '?', Text: "?"})
+	if a.mode != ModeHelp {
+		t.Fatalf("mode = %v, want help", a.mode)
+	}
+	_ = a.handleKey(tea.KeyPressMsg{Code: 'о', Text: "о"})
+	_ = a.handleKey(tea.KeyPressMsg{Code: 'о', Text: "о"})
+	_ = a.handleKey(tea.KeyPressMsg{Code: 'л', Text: "л"})
+	if got := a.help.Selected(); got != 1 {
+		t.Fatalf("selected = %d after о о л, want 1", got)
+	}
+	// Search inside the cheatsheet takes the letter as typed.
+	_ = a.handleKey(tea.KeyPressMsg{Code: '/', Text: "/"})
+	_ = a.handleKey(tea.KeyPressMsg{Code: 'о', Text: "о"})
+	if !a.help.IsSearching() || a.help.Selected() != 0 {
+		t.Fatalf("searching = %v selected = %d, want a Cyrillic query", a.help.IsSearching(), a.help.Selected())
+	}
+}

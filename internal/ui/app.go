@@ -1061,7 +1061,7 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (a *App) handleKey(msg tea.KeyMsg) tea.Cmd {
 	a.nonLatinLayout = layoutHint(msg, a.nonLatinLayout)
-	msg = physicalKey(msg, !textEntryMode(a.mode), a.nonLatinLayout)
+	msg = physicalKey(msg, !a.textEntry(), a.nonLatinLayout)
 
 	// Ctrl+C is intercepted globally and routed through the same
 	// confirm prompt as lowercase `q`, so an accidental Ctrl+C while
