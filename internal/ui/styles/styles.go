@@ -48,7 +48,7 @@ var (
 
 	// Panel styles
 	FocusedBorder = lipgloss.NewStyle().
-			BorderStyle(lipgloss.ThickBorder()).
+			BorderStyle(lipgloss.RoundedBorder()).
 			BorderForeground(Primary).
 			BorderBackground(Background).
 			Background(Background)
@@ -447,7 +447,7 @@ func Username(userID string, colored bool) lipgloss.Style {
 
 func buildStyles() {
 	FocusedBorder = lipgloss.NewStyle().
-		BorderStyle(lipgloss.ThickBorder()).BorderForeground(Primary).BorderBackground(Background).Background(Background)
+		BorderStyle(lipgloss.RoundedBorder()).BorderForeground(Primary).BorderBackground(Background).Background(Background)
 	UnfocusedBorder = lipgloss.NewStyle().
 		BorderStyle(lipgloss.RoundedBorder()).BorderForeground(Border).BorderBackground(Background).Background(Background)
 	WorkspaceActive = lipgloss.NewStyle().

@@ -56,7 +56,7 @@ func (a *App) renderSidebar(sidebarWidth, sidebarBorder, contentHeight int, them
 		Width(sidebarWidth)
 	if sbFocused {
 		borderStyle = lipgloss.NewStyle().
-			BorderStyle(lipgloss.ThickBorder()).
+			BorderStyle(lipgloss.RoundedBorder()).
 			BorderForeground(styles.Primary).
 			BorderBackground(styles.SidebarBackground).
 			Background(styles.SidebarBackground).

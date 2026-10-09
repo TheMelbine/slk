@@ -2139,10 +2139,9 @@ func TestGolden_OverlayFinderIsCompositedOverBackdrop(t *testing.T) {
 // focused/unfocused border fork, and neither survives a scenario that
 // quietly ended up with one window: a single-window tree short-circuits
 // to renderMessagesRegion (view_window_region.go:30) and the file
-// becomes base at another size. The borders are the visible signature
-// of the fork — FocusedBorder is a THICK box, UnfocusedBorder a ROUNDED
-// one (styles/styles.go:439-442) — so both glyphs must be present in
-// the messages band, and neither on its own.
+// becomes base at another size. Both borders are rounded and differ
+// only in color, so the signature is two top-left corners in the
+// messages band where the unsplit fixture has one.
 func TestGolden_WindowSplitRendersTwoDistinctPanes(t *testing.T) {
 	sc := goldenScenarioNamed(t, "window_split")
 	a := sc.build(t)
@@ -2153,17 +2152,11 @@ func TestGolden_WindowSplitRendersTwoDistinctPanes(t *testing.T) {
 	}
 
 	band := goldenPanelText(a.View().Content, a.layout.sidebarEnd, a.layout.msgEnd)
-	// Top-left corners, which are unambiguous: "┏" only comes from
-	// lipgloss.ThickBorder and "╭" only from RoundedBorder. Sliced to
-	// the messages band so the sidebar's own rounded border cannot
-	// satisfy the second one.
-	if !strings.Contains(band, "┏") {
-		t.Errorf("no thick (focused) border in the messages band; the focused pane did not "+
-			"render through renderMessagesRegion. Band was:\n%s", band)
-	}
-	if !strings.Contains(band, "╭") {
-		t.Errorf("no rounded (unfocused) border in the messages band; the second pane did not "+
-			"render through renderUnfocusedWindow. Band was:\n%s", band)
+	// Sliced to the messages band so the sidebar's own border cannot
+	// count.
+	if got := strings.Count(band, "╭"); got < 2 {
+		t.Errorf("%d pane corners in the messages band, want 2; the split did not render "+
+			"both windows. Band was:\n%s", got, band)
 	}
 
 	// Distinct CONTENT, not just distinct chrome. The two windows are
@@ -2184,14 +2177,12 @@ func TestGolden_WindowSplitRendersTwoDistinctPanes(t *testing.T) {
 			"view was:\n%s", plain)
 	}
 
-	// Control: the same fixture WITHOUT the split has neither a second
-	// pane nor a thick border in the band, so the assertions above are
-	// about the split and not about the base chrome.
+	// Control: the same fixture WITHOUT the split has one pane, so the
+	// count above is about the split and not about the base chrome.
 	ctrl := goldenScenarioNamed(t, "base").build(t)
 	cband := goldenPanelText(ctrl.View().Content, ctrl.layout.sidebarEnd, ctrl.layout.msgEnd)
-	if strings.Contains(cband, "┏") {
-		t.Fatalf("control: the unsplit messages band already carries a thick border, so "+
-			"the focused-border assertion proves nothing. Band was:\n%s", cband)
+	if got := strings.Count(cband, "╭"); got != 1 {
+		t.Fatalf("control: %d pane corners in the unsplit messages band, want 1. Band was:\n%s", got, cband)
 	}
 }
 
