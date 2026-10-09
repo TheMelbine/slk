@@ -74,6 +74,7 @@ type Cache struct {
 	mu      sync.RWMutex
 	renders map[string]string // userID -> rendered ANSI string
 	minis   map[string]string // userID -> rendered MiniCols×MiniRows string
+	files   map[string]string // userID -> avatar file in the disk cache
 
 	// inflight tracks userIDs whose Preload is currently in-flight (or
 	// already rendered). Acts as a dedup gate so a hot render path
@@ -225,6 +226,10 @@ func (c *Cache) preloadInner(userID, avatarURL string) {
 		c.minis = make(map[string]string)
 	}
 	c.minis[userID] = mini
+	if c.files == nil {
+		c.files = make(map[string]string)
+	}
+	c.files[userID] = res.Source
 	c.mu.Unlock()
 	if c.onReady != nil {
 		c.onReady(userID)
@@ -255,6 +260,14 @@ func (c *Cache) Get(userID string) string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.renders[userID]
+}
+
+// File returns the path of the user's avatar in the disk cache, or
+// empty if it is not loaded yet. Desktop notifications attach it.
+func (c *Cache) File(userID string) string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.files[userID]
 }
 
 // GetMini returns the one-row avatar, or empty if not cached. It is

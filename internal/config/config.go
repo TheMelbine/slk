@@ -131,8 +131,8 @@ type Notifications struct {
 	OnKeyword  []string `toml:"on_keyword"`
 	QuietHours string   `toml:"quiet_hours"`
 	// NotifyCommand, when set, runs instead of the built-in OS notification.
-	// It is executed via `sh -c` with the notification's title and body exposed
-	// as $SLK_TITLE and $SLK_BODY. Example:
+	// It is executed via `sh -c` with the notification's title, body and the
+	// sender's avatar file exposed as $SLK_TITLE, $SLK_BODY and $SLK_IMAGE. Example:
 	//   notify_command = 'terminal-notifier -title "$SLK_TITLE" -message "$SLK_BODY"'
 	NotifyCommand string `toml:"notify_command"`
 	// StatusCommand, when set, runs on every unread-state change (a message

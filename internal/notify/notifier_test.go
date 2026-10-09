@@ -383,3 +383,41 @@ func TestShouldNotify_ChannelLevel(t *testing.T) {
 		t.Error("level nothing: followed thread reply should notify")
 	}
 }
+
+func TestNotifyWithImage_RunsHelper(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "args")
+	helper := filepath.Join(dir, "slk-notifier")
+	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" >" + out + "\n"
+	if err := os.WriteFile(helper, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("__CFBundleIdentifier", "com.example.term")
+	n := &Notifier{enabled: true, helper: helper}
+	if err := n.NotifyWithImage("Alice", "hi", "/tmp/a.png"); err != nil {
+		t.Fatalf("NotifyWithImage: %v", err)
+	}
+	got, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "--title\nAlice\n--body\nhi\n--focus-title\nslk\n--image\n/tmp/a.png\n--activate\ncom.example.term\n"
+	if string(got) != want {
+		t.Errorf("helper args:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestNotifyWithImage_CommandSeesImage(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "out")
+	n := New(true, "printf '%s' \"$SLK_IMAGE\" >"+out)
+	if err := n.NotifyWithImage("t", "b", "/tmp/a.png"); err != nil {
+		t.Fatalf("NotifyWithImage: %v", err)
+	}
+	got, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "/tmp/a.png" {
+		t.Errorf("$SLK_IMAGE = %q, want /tmp/a.png", got)
+	}
+}

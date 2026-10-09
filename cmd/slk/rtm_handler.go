@@ -42,6 +42,9 @@ type rtmEventHandler struct {
 	// openThread reports the thread on screen, ("", "") when the thread
 	// panel is closed. nil in tests.
 	openThread func() (channelID, threadTS string)
+	// avatarFile returns the sender's avatar on disk for the
+	// notification, fetching it if needed. nil in tests.
+	avatarFile func(userID string) string
 
 	// cfg is the loaded user config; used by OnConversationOpened to
 	// resolve sidebar section + section order via buildChannelItem.
@@ -250,7 +253,11 @@ func (h *rtmEventHandler) OnMessage(channelID, userID, ts, text, threadTS, subty
 			// the stripper wants a plain map.
 			body := senderName + ": " + notify.StripSlackMarkupWithUserGroups(text, h.userNames.MentionedNames(text), groupNames)
 			go func() {
-				if err := h.notifier.Notify(title, body); err != nil {
+				var image string
+				if h.avatarFile != nil {
+					image = h.avatarFile(authorID)
+				}
+				if err := h.notifier.NotifyWithImage(title, body, image); err != nil {
 					debuglog.Notify("notification failed: %v", err)
 				}
 			}()

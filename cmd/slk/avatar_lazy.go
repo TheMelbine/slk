@@ -38,3 +38,26 @@ func lazyMiniAvatar(wctx *WorkspaceContext, avatars *avatar.Cache, userID string
 	lazyAvatar(wctx, avatars, userID)
 	return ""
 }
+
+// avatarFile is the user's avatar in the disk cache, for a desktop
+// notification. It blocks on the download when the avatar has not been
+// fetched yet, so call it off the UI goroutine. Empty when the user has
+// no avatar URL or the fetch fails.
+func avatarFile(wctx *WorkspaceContext, avatars *avatar.Cache, userID string) string {
+	if f := avatars.File(userID); f != "" {
+		return f
+	}
+	if wctx == nil || wctx.AvatarURLs == nil {
+		return ""
+	}
+	v, ok := wctx.AvatarURLs.Load(userID)
+	if !ok {
+		return ""
+	}
+	url, _ := v.(string)
+	if url == "" {
+		return ""
+	}
+	avatars.PreloadSync(userID, url)
+	return avatars.File(userID)
+}

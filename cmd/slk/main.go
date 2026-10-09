@@ -1578,6 +1578,7 @@ func run() error {
 				workspaceName:   wctx.TeamName,
 				activeChannelID: func() string { return app.ActiveChannelID() },
 				openThread:      func() (string, string) { return app.OpenThread() },
+				avatarFile:      func(userID string) string { return avatarFile(wctx, avatarCache, userID) },
 				cfg:             cfgSnap,
 				wsCtx:           wctx,
 				backfillGate:    dedupeGate{window: 30 * time.Second},

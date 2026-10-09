@@ -8,6 +8,7 @@ import (
 	imgpng "image/png"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -85,6 +86,25 @@ func TestPreload_OnReadyNotFiredOnFetchError(t *testing.T) {
 
 	if n := called.Load(); n != 0 {
 		t.Fatalf("onReady fired %d times for failed fetch, want 0", n)
+	}
+}
+
+// TestFile_PointsAtCachedAvatar: a loaded avatar exposes its disk file
+// so notifications can attach it; an unknown user has none.
+func TestFile_PointsAtCachedAvatar(t *testing.T) {
+	c, url, done := testCache(t)
+	defer done()
+
+	if got := c.File("U1"); got != "" {
+		t.Fatalf("File before preload = %q, want empty", got)
+	}
+	c.PreloadSync("U1", url)
+	path := c.File("U1")
+	if path == "" {
+		t.Fatal("File after preload is empty")
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("avatar file %q: %v", path, err)
 	}
 }
 

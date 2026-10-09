@@ -34,10 +34,15 @@ quiet_hours = "22:00-08:00"   # planned
 
 # notify_command (optional): run INSTEAD of the built-in OS notification for any
 # message that would notify (DM / mention / keyword). Executed via `sh -c` with
-# $SLK_TITLE and $SLK_BODY set, so you can route notifications through your own
+# $SLK_TITLE, $SLK_BODY and $SLK_IMAGE (the sender's avatar file) set, so you can route notifications through your own
 # tooling (terminal-notifier, a multiplexer's notifier, mako, ...). Values are
 # passed via the environment, so message text can't inject shell syntax.
 # notify_command = 'terminal-notifier -title "$SLK_TITLE" -message "$SLK_BODY"'
+#
+# macOS: run macos/notifier/build.sh once to install slk-notifier.app into
+# ~/Applications. slk then posts notifications through it: the app's icon
+# (Slack's, if Slack.app is installed) on the left, the sender's avatar on the
+# right, and a click brings back the Ghostty tab slk runs in.
 
 # status_command (optional): run on every unread-state change (a message arrives
 # or a channel is read) so an external surface can mirror slk's unread state.

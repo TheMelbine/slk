@@ -4,6 +4,8 @@ package notify
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/gammons/slk/internal/mention"
@@ -15,6 +17,32 @@ import (
 type Notifier struct {
 	enabled bool
 	command string
+	// helper is the slk-notifier binary inside the macOS app bundle
+	// built from macos/notifier. Empty when it is not installed or
+	// off macOS.
+	helper string
+}
+
+// helperPaths lists where New looks for the slk-notifier app bundle.
+func helperPaths() []string {
+	const bin = "slk-notifier.app/Contents/MacOS/slk-notifier"
+	paths := []string{}
+	if home, err := os.UserHomeDir(); err == nil {
+		paths = append(paths, filepath.Join(home, "Applications", bin))
+	}
+	return append(paths, filepath.Join("/Applications", bin))
+}
+
+func findHelper() string {
+	if runtime.GOOS != "darwin" {
+		return ""
+	}
+	for _, p := range helperPaths() {
+		if fi, err := os.Stat(p); err == nil && !fi.IsDir() {
+			return p
+		}
+	}
+	return ""
 }
 
 // New creates a Notifier. If enabled is false, Notify is a no-op. When command
@@ -25,31 +53,56 @@ func New(enabled bool, command string) *Notifier {
 	// beeep's default app name is "DefaultAppName"; brand the notification
 	// as slk so the notification daemon attributes it correctly.
 	beeep.AppName = "slk"
-	return &Notifier{enabled: enabled, command: command}
+	return &Notifier{enabled: enabled, command: command, helper: findHelper()}
 }
 
 // Notify delivers a notification with the given title and body. It returns nil
 // when notifications are disabled. If a notify_command is configured it runs in
 // place of the built-in OS notification; otherwise beeep shows the OS one.
 func (n *Notifier) Notify(title, body string) error {
+	return n.NotifyWithImage(title, body, "")
+}
+
+// NotifyWithImage is Notify with a picture, usually the sender's avatar.
+// notify_command sees it as $SLK_IMAGE. On macOS with slk-notifier
+// installed the helper posts the notification under its own icon and
+// attaches the picture; beeep ignores it.
+func (n *Notifier) NotifyWithImage(title, body, image string) error {
 	if !n.enabled {
 		return nil
 	}
 	if n.command != "" {
-		return n.runCommand(title, body)
+		return n.runCommand(title, body, image)
+	}
+	if n.helper != "" {
+		return n.runHelper(title, body, image)
 	}
 	return beeep.Notify(title, body, "")
 }
 
+// runHelper posts through slk-notifier. --activate names the terminal
+// app slk runs in and --focus-title the start of slk's window title, so
+// a click on the notification brings back the tab slk runs in.
+func (n *Notifier) runHelper(title, body, image string) error {
+	args := []string{"--title", title, "--body", body, "--focus-title", "slk"}
+	if image != "" {
+		args = append(args, "--image", image)
+	}
+	if term := os.Getenv("__CFBundleIdentifier"); term != "" {
+		args = append(args, "--activate", term)
+	}
+	return exec.Command(n.helper, args...).Run()
+}
+
 // runCommand runs the configured notify_command via `sh -c`, exposing the
-// notification's title and body as $SLK_TITLE and $SLK_BODY. They are passed
-// through the environment rather than interpolated into the command string, so
+// notification's title, body and image path as $SLK_TITLE, $SLK_BODY and
+// $SLK_IMAGE. They are passed through the environment rather than interpolated into the command string, so
 // arbitrary message text (e.g. a body containing "; rm -rf ~") cannot inject
 // shell syntax. Notify is already called from its own goroutine, so a
 // synchronous Run — which also reaps the child — is fine.
-func (n *Notifier) runCommand(title, body string) error {
+func (n *Notifier) runCommand(title, body, image string) error {
 	cmd := exec.Command("sh", "-c", n.command)
-	cmd.Env = append(os.Environ(), "SLK_TITLE="+title, "SLK_BODY="+body)
+	cmd.Env = append(os.Environ(), "SLK_TITLE="+title, "SLK_BODY="+body, "SLK_IMAGE="+image)
 	return cmd.Run()
 }
 
