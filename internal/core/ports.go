@@ -246,6 +246,15 @@ type ChannelService interface {
 	// sidebar sections. Returns a Msg (typically ChannelStarToggledMsg).
 	ToggleStar(channelID ids.ChannelID) Msg
 
+	// SectionCollapse returns the workspace's saved sidebar section
+	// states (section key -> collapsed). A synchronous SQLite read of a
+	// handful of rows; the App calls it when a workspace becomes active.
+	SectionCollapse(teamID string) map[string]bool
+
+	// SaveSectionCollapse persists one section's state after the user
+	// toggles it. Fire-and-forget.
+	SaveSectionCollapse(teamID, sectionKey string, collapsed bool)
+
 	// RunCommand runs a slash command in the channel (in the thread
 	// when threadTS is set). command carries the leading slash. Returns
 	// a Msg (typically SlashCommandRanMsg); the command's response

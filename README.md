@@ -15,6 +15,7 @@ A fork of [slk](https://github.com/gammons/slk) by Grant Ammons with changes I w
 **Channels and workspaces**
 
 - `s` stars or unstars a channel
+- Collapsed sidebar sections stay collapsed across restarts, per workspace
 - Workspace icons in the rail instead of initials; the rail is hidden when there is only one workspace
 
 **Keys**

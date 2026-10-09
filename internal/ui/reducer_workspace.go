@@ -243,6 +243,7 @@ func reduceWorkspaceReady(a *App, m WorkspaceReadyMsg) tea.Cmd {
 		a.SetCurrentUserID(m.UserID)
 		a.activeTeamID = m.TeamID
 		a.applySlashCommands()
+		a.loadSectionCollapse()
 		pres, dndEnabled, dndEnd, _ := a.presence.Status(a.activeTeamID)
 		a.statusbar.SetStatus(pres, dndEnabled, dndEnd)
 		a.workspaceRail.SelectByID(m.TeamID)
@@ -259,7 +260,7 @@ func reduceWorkspaceReady(a *App, m WorkspaceReadyMsg) tea.Cmd {
 					}
 				}
 			}
-			a.sidebar.SelectByID(target.ID)
+			a.sidebar.SelectByIDKeepCollapsed(target.ID)
 			a.messagepane.SetLoading(true)
 			a.messagepane.SetMessages(nil)
 			batch = append(batch, spinnerTickCmd())
@@ -391,6 +392,7 @@ func reduceWorkspaceSwitched(a *App, m WorkspaceSwitchedMsg) tea.Cmd {
 	a.SetCurrentUserID(m.UserID)
 	a.activeTeamID = m.TeamID
 	a.applySlashCommands()
+	a.loadSectionCollapse()
 	pres, dndEnabled, dndEnd, _ := a.presence.Status(a.activeTeamID)
 	a.statusbar.SetStatus(pres, dndEnabled, dndEnd)
 	// Apply per-workspace theme. Must run on Update goroutine so
@@ -427,7 +429,7 @@ func reduceWorkspaceSwitched(a *App, m WorkspaceSwitchedMsg) tea.Cmd {
 				}
 			}
 		}
-		a.sidebar.SelectByID(target.ID)
+		a.sidebar.SelectByIDKeepCollapsed(target.ID)
 		batch = append(batch, func() tea.Msg {
 			return ChannelSelectedMsg{ID: target.ID, Name: target.Name, Type: target.Type}
 		})

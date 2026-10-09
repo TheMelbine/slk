@@ -204,3 +204,38 @@ func TestIsThreadsSelected_FalseOnSectionHeader(t *testing.T) {
 		t.Errorf("SelectedItem should return ok=false when cursor is on a section header")
 	}
 }
+
+func TestSetCollapseState_OverridesDefaultsPerWorkspace(t *testing.T) {
+	m := New([]ChannelItem{
+		{ID: "C1", Name: "general", Type: "channel"},
+		{ID: "D1", Name: "alice", Type: "dm"},
+	})
+	m.SetCollapseState(map[string]bool{"Channels": false, "Direct Messages": true})
+	if m.IsCollapsed("Channels") || !m.IsCollapsed("Direct Messages") {
+		t.Fatalf("saved state not applied: Channels=%v DMs=%v", m.IsCollapsed("Channels"), m.IsCollapsed("Direct Messages"))
+	}
+	// Another workspace with nothing saved gets the defaults back, not
+	// the previous workspace's state.
+	m.SetCollapseState(nil)
+	if !m.IsCollapsed("Channels") || m.IsCollapsed("Direct Messages") {
+		t.Errorf("defaults not restored: Channels=%v DMs=%v", m.IsCollapsed("Channels"), m.IsCollapsed("Direct Messages"))
+	}
+}
+
+func TestSelectByIDKeepCollapsed(t *testing.T) {
+	m := New([]ChannelItem{
+		{ID: "C1", Name: "general", Type: "channel"},
+		{ID: "D1", Name: "alice", Type: "dm"},
+	})
+	m.SelectByIDKeepCollapsed("C1") // in the collapsed Channels section
+	if !m.IsCollapsed("Channels") {
+		t.Fatal("restoring a channel expanded its collapsed section")
+	}
+	if name, ok := m.IsSectionHeaderSelected(); !ok || name != "Channels" {
+		t.Errorf("cursor on %q (header=%v), want the Channels header", name, ok)
+	}
+	m.SelectByIDKeepCollapsed("D1") // expanded section: selected directly
+	if it, ok := m.SelectedItem(); !ok || it.ID != "D1" {
+		t.Errorf("selected %+v, want D1", it)
+	}
+}

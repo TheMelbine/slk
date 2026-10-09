@@ -161,6 +161,13 @@ func (db *DB) migrate() error {
 		PRIMARY KEY (workspace_id, channel_id)
 	);
 
+	CREATE TABLE IF NOT EXISTS sidebar_collapse (
+		workspace_id TEXT NOT NULL,
+		section_key  TEXT NOT NULL,
+		collapsed    INTEGER NOT NULL,
+		PRIMARY KEY (workspace_id, section_key)
+	);
+
 	CREATE TABLE IF NOT EXISTS thread_subscriptions (
 		workspace_id TEXT NOT NULL,
 		channel_id   TEXT NOT NULL,

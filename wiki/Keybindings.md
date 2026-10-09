@@ -6,7 +6,7 @@
 | `h` / `l` | Normal | Switch focus between panels |
 | `Tab` / `Shift+Tab` | Normal | Cycle focus |
 | `Enter` | Normal (sidebar) | Open selected channel, or toggle a section header |
-| `Space` | Normal (sidebar) | Toggle the selected section header (collapse/expand) |
+| `Space` | Normal (sidebar) | Toggle the selected section header (collapse/expand). The state is saved per workspace and survives restarts; Slack sections are keyed by ID, so renaming one in Slack keeps it, while a `[sections.*]` section renamed in the config falls back to its default. Jumping into a collapsed section (`Ctrl+T`, next unread, a notification click) opens it only until the next start |
 | `Enter` | Normal (message) | Open thread |
 | `i` | Normal | Enter insert mode |
 | `Esc` | Insert / Command | Return to normal mode |

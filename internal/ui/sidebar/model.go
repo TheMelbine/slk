@@ -1226,6 +1226,53 @@ func (m *Model) ExpireStatuses(now time.Time) bool {
 	return changed
 }
 
+// SetCollapseState replaces the collapse state with a workspace's saved
+// one: section ID or config section name -> collapsed. Sections absent
+// from state take the defaults ("Channels" and "Apps" collapsed in
+// config mode, everything expanded in Slack mode). Keys from both modes
+// can share the map: IDs and names do not collide.
+func (m *Model) SetCollapseState(state map[string]bool) {
+	m.collapsed = map[string]bool{
+		defaultChannelsSection: true,
+		defaultAppsSection:     true,
+	}
+	m.collapseByID = make(map[string]bool, len(state))
+	for k, v := range state {
+		m.collapsed[k] = v
+		m.collapseByID[k] = v
+	}
+	m.rebuildNavPreserveCursor()
+	m.cacheValid = false
+	m.dirty()
+}
+
+// SelectByIDKeepCollapsed is SelectByID for restoring a channel the
+// user did not just ask for (the last-viewed one at startup or on a
+// workspace switch): a channel in a collapsed section leaves it
+// collapsed and puts the cursor on the section's header.
+func (m *Model) SelectByIDKeepCollapsed(id string) {
+	for _, idx := range m.filtered {
+		if m.items[idx].ID != id {
+			continue
+		}
+		section := m.sectionFor(m.items[idx])
+		if !m.IsCollapsed(section) {
+			break
+		}
+		for i, n := range m.nav {
+			if n.kind == navHeader && n.header == section {
+				if m.cursor != i {
+					m.cursor = i
+					m.dirty()
+				}
+				return
+			}
+		}
+		return
+	}
+	m.SelectByID(id)
+}
+
 func (m *Model) SelectByID(id string) {
 	// Fast path: the channel is already in nav (its section is expanded).
 	for i, n := range m.nav {

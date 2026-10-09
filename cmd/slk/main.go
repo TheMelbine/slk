@@ -904,6 +904,18 @@ func run() error {
 				}
 				return ui.MessagesAroundLoadedMsg{ChannelID: chIDStr, TargetTS: string(ts), Messages: msgItems}
 			},
+			SectionCollapse: func(teamID string) map[string]bool {
+				state, err := db.SectionCollapse(teamID)
+				if err != nil {
+					debuglog.Cache("SectionCollapse %s: %v", teamID, err)
+				}
+				return state
+			},
+			SaveSectionCollapse: func(teamID, sectionKey string, collapsed bool) {
+				if err := db.SetSectionCollapsed(teamID, sectionKey, collapsed); err != nil {
+					debuglog.Cache("SaveSectionCollapse %s/%s: %v", teamID, sectionKey, err)
+				}
+			},
 			RunCommand: func(channelID ids.ChannelID, threadTS, command, text string) core.Msg {
 				wctx := router.Active()
 				if wctx == nil || wctx.Client == nil {

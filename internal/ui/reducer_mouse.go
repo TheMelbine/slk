@@ -246,10 +246,8 @@ func reduceMouseClick(a *App, m tea.MouseClickMsg) tea.Cmd {
 		// Section header: expand or collapse it in place, matching the
 		// Enter behaviour. Returns false when the selected row is not
 		// a header.
-		if a.sidebar.ToggleCollapseSelected() {
-			return nil
-		}
-		return nil
+		cmd, _ := a.toggleSectionCollapse()
+		return cmd
 
 	case x < a.layout.MsgEnd():
 		// Interim Phase 2 guard: per-window mouse routing lands in

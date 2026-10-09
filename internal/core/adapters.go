@@ -243,21 +243,23 @@ func (m messageAdapter) Permalink(ctx context.Context, channelID ids.ChannelID, 
 // NewChannelService. Any field may be nil; the resulting service
 // no-ops that operation.
 type ChannelServiceFuncs struct {
-	Fetch            ChannelFetchFunc
-	FetchOlder       OlderMessagesFetchFunc
-	FetchAround      func(channelID ids.ChannelID, ts ids.MessageTS) Msg
-	ReadCache        ChannelCacheReadFunc
-	SyncedAt         func(channelID ids.ChannelID) int64
-	MarkRead         func(channelID ids.ChannelID, ts ids.MessageTS) Msg
-	Lookup           ChannelLookupFunc
-	Join             JoinChannelFunc
-	RecordVisit      ChannelVisitRecorder
-	MembershipFetch  func(channelID ids.ChannelID)
-	OpenConversation func(userIDs []string, requestID uint64) Cmd
-	SearchRemote     func(query string) []ChannelFinderItem
-	ToggleStar       func(channelID ids.ChannelID) Msg
-	RunCommand       func(channelID ids.ChannelID, threadTS, command, text string) Msg
-	CycleNotifyLevel func(channelID ids.ChannelID) Msg
+	Fetch               ChannelFetchFunc
+	FetchOlder          OlderMessagesFetchFunc
+	FetchAround         func(channelID ids.ChannelID, ts ids.MessageTS) Msg
+	ReadCache           ChannelCacheReadFunc
+	SyncedAt            func(channelID ids.ChannelID) int64
+	MarkRead            func(channelID ids.ChannelID, ts ids.MessageTS) Msg
+	Lookup              ChannelLookupFunc
+	Join                JoinChannelFunc
+	RecordVisit         ChannelVisitRecorder
+	MembershipFetch     func(channelID ids.ChannelID)
+	OpenConversation    func(userIDs []string, requestID uint64) Cmd
+	SearchRemote        func(query string) []ChannelFinderItem
+	ToggleStar          func(channelID ids.ChannelID) Msg
+	RunCommand          func(channelID ids.ChannelID, threadTS, command, text string) Msg
+	SectionCollapse     func(teamID string) map[string]bool
+	SaveSectionCollapse func(teamID, sectionKey string, collapsed bool)
+	CycleNotifyLevel    func(channelID ids.ChannelID) Msg
 }
 
 // NewChannelService builds a ChannelService from a
@@ -324,6 +326,19 @@ func (c channelAdapter) Join(channelID ids.ChannelID, channelName string) Msg {
 		return nil
 	}
 	return c.fns.Join(channelID, channelName)
+}
+
+func (c channelAdapter) SectionCollapse(teamID string) map[string]bool {
+	if c.fns.SectionCollapse == nil {
+		return nil
+	}
+	return c.fns.SectionCollapse(teamID)
+}
+
+func (c channelAdapter) SaveSectionCollapse(teamID, sectionKey string, collapsed bool) {
+	if c.fns.SaveSectionCollapse != nil {
+		c.fns.SaveSectionCollapse(teamID, sectionKey, collapsed)
+	}
 }
 
 func (c channelAdapter) RunCommand(channelID ids.ChannelID, threadTS, command, text string) Msg {

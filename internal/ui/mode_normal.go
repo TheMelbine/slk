@@ -216,8 +216,8 @@ func handleNormalMode(a *App, msg tea.KeyMsg) tea.Cmd {
 		// panel does with a literal space (typically nothing in
 		// normal mode).
 		if a.focusedPanel == PanelSidebar {
-			if a.sidebar.ToggleCollapseSelected() {
-				return nil
+			if cmd, ok := a.toggleSectionCollapse(); ok {
+				return cmd
 			}
 		}
 

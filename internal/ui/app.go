@@ -1993,8 +1993,8 @@ func (a *App) handleEnter() tea.Cmd {
 		// place. Section headers are also navigable via j/k so the
 		// user can expand/collapse the firehose Channels section
 		// (collapsed by default) without leaving the keyboard.
-		if a.sidebar.ToggleCollapseSelected() {
-			return nil
+		if cmd, ok := a.toggleSectionCollapse(); ok {
+			return cmd
 		}
 		item, ok := a.sidebar.SelectedItem()
 		if ok {
