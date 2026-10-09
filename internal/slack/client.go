@@ -2365,3 +2365,29 @@ func (c *Client) HistoryWithVersions(ctx context.Context, channelID string, opts
 		HasMore:       resp.HasMore,
 	}, nil
 }
+
+// TeamIcon returns the workspace icon URL from team.info, the largest
+// size up to 132 px, or "" when the workspace has none.
+func (c *Client) TeamIcon(ctx context.Context) (string, error) {
+	raw, err := c.postForm(ctx, "team.info", nil)
+	if err != nil {
+		return "", err
+	}
+	if err := parseOKResponse("team.info", raw); err != nil {
+		return "", err
+	}
+	var resp struct {
+		Team struct {
+			Icon map[string]any `json:"icon"`
+		} `json:"team"`
+	}
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return "", fmt.Errorf("parsing team.info: %w", err)
+	}
+	for _, size := range []string{"image_132", "image_102", "image_88", "image_68", "image_44"} {
+		if u, ok := resp.Team.Icon[size].(string); ok && u != "" {
+			return u, nil
+		}
+	}
+	return "", nil
+}

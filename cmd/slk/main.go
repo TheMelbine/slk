@@ -612,6 +612,9 @@ func run() error {
 	// thousands of users) wrote ~100MB of kitty graphics APC escape
 	// data to stdout at startup and produced a multi-minute hang on
 	// terminals that decode kitty graphics (kitty, ghostty).
+	app.SetWorkspaceIconFunc(func(teamID string) string {
+		return avatarCache.Get(workspace.IconKey(teamID))
+	})
 	app.SetAvatarService(core.NewAvatarServiceWithMini(
 		func(userID string) string { return lazyAvatar(router.Active(), avatarCache, userID) },
 		func(userID string) string { return lazyMiniAvatar(router.Active(), avatarCache, userID) },
@@ -1546,6 +1549,7 @@ func run() error {
 
 			router.Add(wctx)
 			wsMgr.AddWorkspace(wctx.TeamID, wctx.TeamName, "")
+			go loadWorkspaceIcon(ctx, wctx.Client, wctx.TeamID, avatarCache)
 
 			// Decide whether this workspace becomes the active one.
 			// If default_workspace resolved to a team ID, only that

@@ -3,6 +3,8 @@ package workspace
 import (
 	"strings"
 	"testing"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 func TestWorkspaceRailView(t *testing.T) {
@@ -178,5 +180,47 @@ func TestOtherUnreadCount_UsesLastRefreshWithoutReading(t *testing.T) {
 	}
 	if calls != 1 {
 		t.Errorf("reader calls = %d want 1 (RefreshUnreads only)", calls)
+	}
+}
+
+func TestView_Icons(t *testing.T) {
+	m := New([]WorkspaceItem{
+		{ID: "T1", Name: "Acme", Initials: "AC"},
+		{ID: "T2", Name: "Beta", Initials: "BE", HasUnread: true},
+		{ID: "T3", Name: "Gamma", Initials: "GA"},
+	}, 0)
+	m.SetIconFunc(func(teamID string) string {
+		if teamID == "T3" {
+			return "" // not loaded yet
+		}
+		return "[" + teamID + "]\n[" + teamID + "]"
+	})
+	lines := strings.Split(ansi.Strip(m.View(12)), "\n")
+	want := []string{
+		"",
+		"▌[T1] ",
+		"▌[T1] ",
+		"",
+		" [T2]●",
+		" [T2] ",
+		"",
+		"  GA",
+	}
+	for i, w := range want {
+		if got := strings.TrimRight(lines[i], " "); got != strings.TrimRight(w, " ") {
+			t.Errorf("line %d = %q, want %q", i, got, w)
+		}
+	}
+}
+
+func TestClickAt_Icons(t *testing.T) {
+	m := New([]WorkspaceItem{{ID: "T1"}, {ID: "T2"}}, 0)
+	m.SetIconFunc(func(string) string { return "" })
+	cases := map[int]string{0: "", 1: "T1", 2: "T1", 3: "", 4: "T2", 5: "T2", 6: "", 7: ""}
+	for y, want := range cases {
+		got, ok := m.ClickAt(y)
+		if ok != (want != "") || got.ID != want {
+			t.Errorf("ClickAt(%d) = %q ok=%v, want %q", y, got.ID, ok, want)
+		}
 	}
 }

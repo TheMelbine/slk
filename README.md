@@ -14,7 +14,8 @@ A fork of [slk](https://github.com/gammons/slk) by Grant Ammons with changes I w
 - Hotkeys work on a Cyrillic keyboard layout, and pickers and the command line accept non-ASCII input
 - Emoji and links render inside alert attachments
 - Theme color `"none"` for a transparent background, author name colors in themes
-- Kitty graphics fixes for Ghostty, workspace rail hidden with a single workspace
+- Workspace icons in the rail instead of initials, rail hidden with a single workspace
+- Kitty graphics fixes for Ghostty
 
 Build from source: `go build -o bin/slk ./cmd/slk`. Keybindings: [wiki/Keybindings.md](wiki/Keybindings.md). The clip above is `slk --demo plus` recorded with `vhs docs/assets/demo/plus.tape`.
 

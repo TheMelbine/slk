@@ -62,6 +62,7 @@ import (
 	"github.com/gammons/slk/internal/ui/imgrender"
 	"github.com/gammons/slk/internal/ui/messages"
 	"github.com/gammons/slk/internal/ui/statusbar"
+	"github.com/gammons/slk/internal/ui/workspace"
 )
 
 // copiedClearAfter schedules a CopiedClearMsg `d` from now for the
@@ -287,6 +288,10 @@ var reduceIO reducerFunc = func(a *App, msg tea.Msg) (tea.Cmd, bool) {
 		return nil, true
 
 	case messages.AvatarReadyMsg:
+		if strings.HasPrefix(m.UserID, workspace.IconKey("")) {
+			a.workspaceRail.IconReady()
+			return nil, true
+		}
 		// A lazy avatar fetch landed for m.UserID. Both the
 		// messages pane and the thread panel cache avatar slots
 		// in their render caches, so both must invalidate. The

@@ -2800,6 +2800,12 @@ func (a *App) SetAvatarService(s core.AvatarService) {
 	a.threadCompose.SetAvatarFunc(pickerFn)
 }
 
+// SetWorkspaceIconFunc sets the renderer for workspace icons in the
+// rail; fn returns "" until an icon has loaded.
+func (a *App) SetWorkspaceIconFunc(fn func(teamID string) string) {
+	a.workspaceRail.SetIconFunc(fn)
+}
+
 // SetColoredUsernames enables or disables deterministic per-user coloring
 // of usernames across all message panes and the thread panel.
 func (a *App) SetColoredUsernames(enabled bool) {

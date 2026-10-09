@@ -30,6 +30,39 @@ type Model struct {
 	// lastUnread is the set the last RefreshUnreads read, which
 	// OtherUnreadCount counts.
 	lastUnread []string
+	// iconFn returns a workspace's icon rendered IconCols×IconRows, or
+	// "" while it is not loaded. nil draws initials only.
+	iconFn func(teamID string) string
+}
+
+// IconCols × IconRows is the size of a workspace icon in the rail. It
+// matches avatar.AvatarCols × avatar.AvatarRows, the size the icon is
+// rendered at.
+const (
+	IconCols = 4
+	IconRows = 2
+)
+
+// IconKey is the avatar-cache key a workspace icon is stored under, so
+// it never collides with a user ID.
+func IconKey(teamID string) string { return "team:" + teamID }
+
+// SetIconFunc sets the icon renderer. With one set, every rail item is
+// IconRows tall, and items whose icon has not loaded show initials.
+func (m *Model) SetIconFunc(fn func(teamID string) string) {
+	m.iconFn = fn
+	m.dirty()
+}
+
+// IconReady redraws the rail after a workspace icon finished loading.
+func (m *Model) IconReady() { m.dirty() }
+
+// itemRows is the height of one rail item.
+func (m Model) itemRows() int {
+	if m.iconFn != nil {
+		return IconRows
+	}
+	return 1
 }
 
 // Version returns a counter that increments any time the View() output could
@@ -164,6 +197,14 @@ func (m Model) View(height int) string {
 
 	var rows []string
 	for i, item := range m.items {
+		var icon string
+		if m.iconFn != nil {
+			icon = m.iconFn(item.ID)
+		}
+		if icon != "" {
+			rows = append(rows, m.iconItem(icon, i == m.selected, item.HasUnread))
+			continue
+		}
 		var style lipgloss.Style
 		if i == m.selected {
 			style = styles.WorkspaceActive
@@ -176,7 +217,7 @@ func (m Model) View(height int) string {
 			initials = initials + styles.PresenceOnline.Render("●")
 		}
 		label := style.Render(initials)
-		rows = append(rows, label)
+		rows = append(rows, label+strings.Repeat("\n", m.itemRows()-1))
 	}
 
 	content := strings.Join(rows, "\n\n")
@@ -197,13 +238,39 @@ func (m Model) View(height int) string {
 	return rail
 }
 
+// iconItem lays out one icon item, 6 columns wide: a bar in the
+// accent color marks the active workspace (a background highlight
+// would not show through the image), and a dot to the right of the
+// icon marks unread.
+func (m Model) iconItem(icon string, active, unread bool) string {
+	bg := lipgloss.NewStyle().Background(styles.RailBackground)
+	left := bg.Render(" ")
+	if active {
+		left = bg.Foreground(styles.Primary).Render("▌")
+	}
+	lines := strings.Split(icon, "\n")
+	for len(lines) < IconRows {
+		lines = append(lines, strings.Repeat(" ", IconCols))
+	}
+	out := make([]string, IconRows)
+	for r := 0; r < IconRows; r++ {
+		right := bg.Render(" ")
+		if r == 0 && unread && !active {
+			right = styles.PresenceOnline.Background(styles.RailBackground).Render("●")
+		}
+		out[r] = left + lines[r] + right
+	}
+	return strings.Join(out, "\n")
+}
+
 // ClickAt returns the workspace item rendered at rail-local row y,
 // or ok=false when the click landed on a padding row, a gap between
 // items, or past the last item.
 //
 // Row layout mirrors View(): Padding(1,0) puts blank padding at row 0,
 // and items are "\n\n"-joined so they occupy rows 1, 3, 5, ... with
-// blank gap rows at 2, 4, 6, .... There is no horizontal column check
+// blank gap rows at 2, 4, 6, ...; with icons each item is IconRows
+// tall, so items start at rows 1, 4, 7, .... There is no horizontal column check
 // because the rail has no border and uses its full 6-col width as the
 // click target.
 func (m Model) ClickAt(y int) (WorkspaceItem, bool) {
@@ -211,10 +278,11 @@ func (m Model) ClickAt(y int) (WorkspaceItem, bool) {
 		return WorkspaceItem{}, false
 	}
 	rel := y - 1
-	if rel%2 != 0 {
+	stride := m.itemRows() + 1
+	if rel%stride >= m.itemRows() {
 		return WorkspaceItem{}, false // gap between items
 	}
-	idx := rel / 2
+	idx := rel / stride
 	if idx < 0 || idx >= len(m.items) {
 		return WorkspaceItem{}, false
 	}

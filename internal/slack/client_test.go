@@ -3558,3 +3558,32 @@ func TestNextNotifyLevel(t *testing.T) {
 		}
 	}
 }
+
+func TestTeamIcon_PicksLargestSize(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		_, _ = w.Write([]byte(`{"ok":true,"team":{"id":"T1","icon":{"image_34":"https://x/34.png","image_88":"https://x/88.png","image_default":false}}}`))
+	}))
+	defer srv.Close()
+	got, err := newTestClient(srv).TeamIcon(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "https://x/88.png" {
+		t.Errorf("TeamIcon = %q, want the 88 px icon", got)
+	}
+	if gotPath != "/api/team.info" {
+		t.Errorf("path = %q", gotPath)
+	}
+}
+
+func TestTeamIcon_Error(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"ok":false,"error":"missing_scope"}`))
+	}))
+	defer srv.Close()
+	if _, err := newTestClient(srv).TeamIcon(context.Background()); err == nil {
+		t.Fatal("want an error")
+	}
+}
