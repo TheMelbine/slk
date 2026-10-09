@@ -904,6 +904,13 @@ func run() error {
 				}
 				return ui.MessagesAroundLoadedMsg{ChannelID: chIDStr, TargetTS: string(ts), Messages: msgItems}
 			},
+			RunCommand: func(channelID ids.ChannelID, threadTS, command, text string) core.Msg {
+				wctx := router.Active()
+				if wctx == nil || wctx.Client == nil {
+					return nil
+				}
+				return runSlashCommand(context.Background(), wctx.Client, string(channelID), threadTS, command, text)
+			},
 			ToggleStar: func(channelID ids.ChannelID) core.Msg {
 				wctx := router.Active()
 				if wctx == nil || wctx.Client == nil {
@@ -1550,6 +1557,7 @@ func run() error {
 			router.Add(wctx)
 			wsMgr.AddWorkspace(wctx.TeamID, wctx.TeamName, "")
 			go loadWorkspaceIcon(ctx, wctx.Client, wctx.TeamID, avatarCache)
+			go loadSlashCommands(ctx, wctx.Client, wctx.TeamID, p.Send)
 
 			// Decide whether this workspace becomes the active one.
 			// If default_workspace resolved to a team ID, only that

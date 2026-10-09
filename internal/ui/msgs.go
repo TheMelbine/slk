@@ -21,6 +21,7 @@ import (
 
 	"github.com/gammons/slk/internal/core"
 	emojiutil "github.com/gammons/slk/internal/emoji"
+	"github.com/gammons/slk/internal/ui/commandpicker"
 	"github.com/gammons/slk/internal/ui/messages"
 	"github.com/gammons/slk/internal/ui/peerstatus"
 	"github.com/gammons/slk/internal/ui/searchresults"
@@ -732,6 +733,37 @@ type ChannelJoinFailedMsg struct {
 	ID   string
 	Name string
 	Err  error
+}
+
+// SlashCommandsMsg delivers a workspace's slash commands for the "/"
+// picker. cmd/slk sends it once the workspace connects.
+type SlashCommandsMsg struct {
+	TeamID   string
+	Commands []commandpicker.Command
+}
+
+// RunSlashCommandMsg asks the App to run a slash command typed in a
+// composer.
+type RunSlashCommandMsg struct {
+	ChannelID string
+	ThreadTS  string
+	Command   string
+	Text      string
+}
+
+// SlashCommandRanMsg carries the result of ChannelService.RunCommand.
+// Success needs no feedback: the command answers with a message.
+type SlashCommandRanMsg struct {
+	Command string
+	Err     error
+}
+
+// EphemeralMessageMsg delivers a message only the user sees, such as a
+// slash command's response. It is shown in the channel or open thread
+// but never cached and never affects read state.
+type EphemeralMessageMsg struct {
+	ChannelID string
+	Message   messages.MessageItem
 }
 
 // ToggleChannelStarMsg requests the App to star or unstar ChannelID.

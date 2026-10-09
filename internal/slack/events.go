@@ -28,6 +28,10 @@ type EventHandler interface {
 	// attachments on the message (empty for plain text messages).
 	OnMessage(channelID, userID, ts, text, threadTS, subtype string, edited bool, files []slack.File, blocks slack.Blocks, attachments []slack.Attachment, botID, username string)
 	OnMessageDeleted(channelID, ts string)
+	// OnEphemeralMessage delivers a message only the user sees, such
+	// as a slash command's response. It is not part of the channel's
+	// history: Slack drops it on reload, and so should slk.
+	OnEphemeralMessage(channelID, userID, ts, text, threadTS string, blocks slack.Blocks, attachments []slack.Attachment, botID, username string)
 	OnReactionAdded(channelID, ts, userID, emoji string)
 	OnReactionRemoved(channelID, ts, userID, emoji string)
 	OnPresenceChange(userID, presence string)
@@ -164,6 +168,7 @@ type wsMessageEvent struct {
 	Attachments     []slack.Attachment `json:"attachments"`
 	Message         *wsSubMsg          `json:"message"`          // for message_changed
 	PreviousMessage *wsSubMsg          `json:"previous_message"` // for message_changed
+	IsEphemeral     bool               `json:"is_ephemeral"`
 }
 
 // wsSubMsg is the inner message for message_changed events.
@@ -377,6 +382,12 @@ func dispatchWebSocketEvent(data []byte, handler EventHandler) {
 	case "message":
 		var msg wsMessageEvent
 		if err := json.Unmarshal(data, &msg); err != nil {
+			return
+		}
+		if msg.IsEphemeral {
+			debuglog.WS("ephemeral message: channel=%s user=%s ts=%s thread_ts=%s",
+				msg.Channel, msg.User, msg.TS, msg.ThreadTS)
+			handler.OnEphemeralMessage(msg.Channel, msg.User, msg.TS, msg.Text, msg.ThreadTS, msg.Blocks, msg.Attachments, msg.BotID, msg.Username)
 			return
 		}
 		switch msg.SubType {

@@ -525,3 +525,41 @@ func (h *rtmEventHandler) OnUserTyping(channelID, userID string) {
 		WorkspaceID: h.workspaceID,
 	})
 }
+
+// OnEphemeralMessage shows a message only the user sees (a slash
+// command's response) in the active workspace. Nothing is cached and
+// read state is untouched: Slack drops such messages on reload, and
+// the next channel load does the same here.
+func (h *rtmEventHandler) OnEphemeralMessage(channelID, userID, ts, text, threadTS string, blocks slack.Blocks, attachments []slack.Attachment, botID, username string) {
+	if h.program == nil || (h.isActive != nil && !h.isActive()) {
+		return
+	}
+	authorID := userID
+	if authorID == "" {
+		authorID = botID
+	}
+	userName := username
+	switch {
+	case userID == "USLACKBOT":
+		userName = "Slackbot"
+	case userName == "":
+		if resolved, ok := resolveUserCached(authorID, h.userNames, h.db); ok {
+			userName = resolved
+		} else {
+			userName = authorID
+		}
+	}
+	h.program.Send(ui.EphemeralMessageMsg{
+		ChannelID: channelID,
+		Message: messages.MessageItem{
+			TS:                ts,
+			UserID:            authorID,
+			UserName:          userName,
+			Text:              text,
+			Timestamp:         formatTimestamp(ts, h.tsFormat),
+			ThreadTS:          threadTS,
+			Blocks:            extractBlocks(blocks),
+			LegacyAttachments: extractLegacyAttachments(attachments),
+		},
+	})
+}

@@ -3587,3 +3587,60 @@ func TestTeamIcon_Error(t *testing.T) {
 		t.Fatal("want an error")
 	}
 }
+
+func TestListCommands_SkipsAliasesAndSorts(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"ok":true,"commands":{
+			"/remind":{"name":"/remind","desc":"Set a reminder","usage":"[what] [when]","type":"core"},
+			"/meet":{"name":"/meet","type":"service","service_name":"Meet"},
+			"/meets":{"name":"/meets","alias_of":"/meet","type":"service"},
+			"/github":{"name":"/github","type":"app","app_name":"GitHub","desc":"GitHub"}}}`))
+	}))
+	defer srv.Close()
+	got, err := newTestClient(srv).ListCommands(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []SlashCommand{
+		{Name: "/github", Desc: "GitHub", AppName: "GitHub"},
+		{Name: "/meet", AppName: "Meet"},
+		{Name: "/remind", Desc: "Set a reminder", Usage: "[what] [when]"},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %+v", got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("[%d] = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}
+
+func TestRunCommand_PostsForm(t *testing.T) {
+	var form url.Values
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/chat.command" {
+			t.Errorf("path = %q", r.URL.Path)
+		}
+		_ = r.ParseForm()
+		form = r.PostForm
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+	if err := newTestClient(srv).RunCommand(context.Background(), "C1", "/remind", "me to stretch in 1h", "1.0"); err != nil {
+		t.Fatal(err)
+	}
+	if form.Get("channel") != "C1" || form.Get("command") != "/remind" || form.Get("text") != "me to stretch in 1h" || form.Get("thread_ts") != "1.0" {
+		t.Errorf("form = %v", form)
+	}
+}
+
+func TestRunCommand_Error(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"ok":false,"error":"invalid_command"}`))
+	}))
+	defer srv.Close()
+	if err := newTestClient(srv).RunCommand(context.Background(), "C1", "/nope", "", ""); err == nil {
+		t.Fatal("want an error")
+	}
+}

@@ -246,6 +246,12 @@ type ChannelService interface {
 	// sidebar sections. Returns a Msg (typically ChannelStarToggledMsg).
 	ToggleStar(channelID ids.ChannelID) Msg
 
+	// RunCommand runs a slash command in the channel (in the thread
+	// when threadTS is set). command carries the leading slash. Returns
+	// a Msg (typically SlashCommandRanMsg); the command's response
+	// arrives separately, as a message.
+	RunCommand(channelID ids.ChannelID, threadTS, command, text string) Msg
+
 	// CycleNotifyLevel moves the channel's Slack notification level one
 	// step along everything → mentions → nothing → everything. Returns
 	// a Msg (typically ChannelNotifyLevelChangedMsg).

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -2390,4 +2391,77 @@ func (c *Client) TeamIcon(ctx context.Context) (string, error) {
 		}
 	}
 	return "", nil
+}
+
+// SlashCommand is one entry of commands.list: a built-in command, an
+// app's command, or a legacy service's.
+type SlashCommand struct {
+	Name    string // with the leading slash, e.g. "/remind"
+	Desc    string
+	Usage   string
+	AppName string // the app or service that owns it; "" for built-ins
+}
+
+// ListCommands returns the slash commands available in the workspace
+// (commands.list, the undocumented method the web client uses), sorted
+// by name. Aliases are left out.
+func (c *Client) ListCommands(ctx context.Context) ([]SlashCommand, error) {
+	raw, err := c.postForm(ctx, "commands.list", nil)
+	if err != nil {
+		return nil, err
+	}
+	if err := parseOKResponse("commands.list", raw); err != nil {
+		return nil, err
+	}
+	var resp struct {
+		Commands map[string]struct {
+			Name        string `json:"name"`
+			Desc        string `json:"desc"`
+			Usage       string `json:"usage"`
+			AppName     string `json:"app_name"`
+			ServiceName string `json:"service_name"`
+			AliasOf     string `json:"alias_of"`
+		} `json:"commands"`
+	}
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return nil, fmt.Errorf("parsing commands.list: %w", err)
+	}
+	out := make([]SlashCommand, 0, len(resp.Commands))
+	for key, cmd := range resp.Commands {
+		if cmd.AliasOf != "" {
+			continue
+		}
+		name := cmd.Name
+		if name == "" {
+			name = key
+		}
+		owner := cmd.AppName
+		if owner == "" {
+			owner = cmd.ServiceName
+		}
+		out = append(out, SlashCommand{Name: name, Desc: cmd.Desc, Usage: cmd.Usage, AppName: owner})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out, nil
+}
+
+// RunCommand runs a slash command in channelID (chat.command, as the web
+// client does). command carries the leading slash; text is everything
+// after it. A non-empty threadTS runs it in that thread. Responses
+// arrive over the WebSocket, often as ephemeral messages.
+func (c *Client) RunCommand(ctx context.Context, channelID, command, text, threadTS string) error {
+	form := url.Values{
+		"channel": {channelID},
+		"command": {command},
+		"text":    {text},
+		"disp":    {command},
+	}
+	if threadTS != "" {
+		form.Set("thread_ts", threadTS)
+	}
+	raw, err := c.postForm(ctx, "chat.command", form)
+	if err != nil {
+		return err
+	}
+	return parseOKResponse("chat.command", raw)
 }

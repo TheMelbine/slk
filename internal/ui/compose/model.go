@@ -14,6 +14,7 @@ import (
 	"github.com/gammons/slk/internal/core"
 	"github.com/gammons/slk/internal/emoji"
 	"github.com/gammons/slk/internal/ui/channelpicker"
+	"github.com/gammons/slk/internal/ui/commandpicker"
 	"github.com/gammons/slk/internal/ui/emojipicker"
 	"github.com/gammons/slk/internal/ui/mentionpicker"
 	"github.com/gammons/slk/internal/ui/styles"
@@ -96,6 +97,13 @@ type Model struct {
 	emojiPicker   emojipicker.Model
 	emojiActive   bool
 	emojiStartCol int
+
+	// Slash-command picker: opened by a "/" typed as the first
+	// character of the message. commands is the workspace's command
+	// set, by name, for recognizing a command at send time.
+	commandPicker commandpicker.Model
+	commandActive bool
+	commands      map[string]bool
 
 	// placeholderOverride, when non-empty, replaces the default
 	// "Message #channel..." placeholder. Used by edit mode to display
@@ -486,6 +494,11 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m2.dirty()
 		return m2, cmd
 	}
+	if m.commandActive && isKey {
+		m2, cmd := m.handleCommandKey(keyMsg)
+		m2.dirty()
+		return m2, cmd
+	}
 	// If mention picker is active, intercept keys.
 	if m.mentionActive && isKey {
 		m2, cmd := m.handleMentionKey(keyMsg)
@@ -543,6 +556,13 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 				m.channelPicker.Open()
 			}
 		}
+	}
+
+	// Command trigger: '/' as the first character of the message.
+	if isKey && keyMsg.Key().Text == "/" && len(m.commands) > 0 &&
+		m.cursorPosition() == 1 && strings.HasPrefix(m.input.Value(), "/") {
+		m.commandActive = true
+		m.commandPicker.Open()
 	}
 
 	// Emoji trigger: ':' at word boundary, plus 2 query chars before the
@@ -993,6 +1013,8 @@ func (m *Model) closePickers() {
 	m.channelPicker.Close()
 	m.emojiActive = false
 	m.emojiPicker.Close()
+	m.commandActive = false
+	m.commandPicker.Close()
 }
 
 // SetChannelMembership records the member set for a channel and, if
@@ -1517,4 +1539,133 @@ func (m Model) View(width int, focused bool) string {
 		return box
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, chips, box)
+}
+
+// handleCommandKey processes key events while the command picker is
+// open. Same keys as the other pickers; a space ends the command name
+// and closes it.
+func (m Model) handleCommandKey(msg tea.KeyMsg) (Model, tea.Cmd) {
+	k := msg.Key()
+	switch {
+	case k.Code == tea.KeyUp || (k.Code == 'p' && isCtrl(k.Mod)):
+		m.commandPicker.MoveUp()
+		return m, nil
+	case k.Code == tea.KeyDown || (k.Code == 'n' && isCtrl(k.Mod)):
+		m.commandPicker.MoveDown()
+		return m, nil
+	case k.Code == tea.KeyEnter || k.Code == tea.KeyTab:
+		if c := m.commandPicker.Select(); c != nil {
+			m.insertCommand(c.Name)
+		}
+		m.CloseCommand()
+		return m, nil
+	case k.Code == tea.KeyEscape:
+		m.CloseCommand()
+		return m, nil
+	}
+	var cmd tea.Cmd
+	m.input, cmd = m.input.Update(msg)
+	m.updateCommandQuery()
+	m.autoGrow()
+	return m, cmd
+}
+
+// updateCommandQuery filters by the text between the leading "/" and
+// the cursor, closing the picker once that is no longer a bare name.
+func (m *Model) updateCommandQuery() {
+	val := m.input.Value()
+	pos := m.cursorPosition()
+	if !strings.HasPrefix(val, "/") || pos < 1 || pos > len(val) || strings.ContainsAny(val[1:pos], " \n") {
+		m.CloseCommand()
+		return
+	}
+	m.commandPicker.SetQuery(val[1:pos])
+}
+
+// insertCommand replaces the typed name with the chosen one plus a
+// space, ready for arguments.
+func (m *Model) insertCommand(name string) {
+	val := m.input.Value()
+	pos := m.cursorPosition()
+	after := ""
+	if pos < len(val) {
+		after = strings.TrimLeft(val[pos:], " ")
+	}
+	m.input.SetValue(name + " " + after)
+	if !strings.Contains(after, "\n") {
+		m.input.SetCursorColumn(len([]rune(name)) + 1)
+	}
+}
+
+// SetCommands provides the workspace's slash commands. nil turns the
+// "/" picker off, and every draft is sent as a message.
+func (m *Model) SetCommands(commands []commandpicker.Command) {
+	m.commands = make(map[string]bool, len(commands))
+	for _, c := range commands {
+		m.commands[c.Name] = true
+	}
+	m.commandPicker.SetCommands(commands)
+}
+
+// SlashCommand parses a draft that starts with "/" and a name:
+// "/name args". isCommand is false for any other draft, which is an
+// ordinary message (a leading space sends "/..." as text, as in Slack).
+// known reports whether the workspace has the command; args is the
+// rest of the draft, trimmed.
+func (m Model) SlashCommand() (name, args string, isCommand, known bool) {
+	val := m.input.Value()
+	if !strings.HasPrefix(val, "/") {
+		return "", "", false, false
+	}
+	name, args, _ = strings.Cut(val, " ")
+	if i := strings.IndexByte(name, '\n'); i >= 0 {
+		name, args = name[:i], val[i+1:]
+	}
+	if len(name) < 2 {
+		return "", "", false, false
+	}
+	return name, strings.TrimSpace(args), true, m.commands[name]
+}
+
+// IsCommandActive returns whether the command picker is showing.
+func (m Model) IsCommandActive() bool { return m.commandActive }
+
+// CloseCommand dismisses the command picker without selecting.
+func (m *Model) CloseCommand() {
+	m.commandActive = false
+	m.commandPicker.Close()
+}
+
+// CommandPickerView returns the rendered command dropdown, or "".
+func (m Model) CommandPickerView(width int) string {
+	if !m.commandActive {
+		return ""
+	}
+	return m.commandPicker.View(width)
+}
+
+// IsPickerActive reports whether any completion dropdown is open.
+func (m Model) IsPickerActive() bool {
+	return m.emojiActive || m.mentionActive || m.channelActive || m.commandActive
+}
+
+// ClosePicker closes the open completion dropdown, reporting whether
+// there was one. Esc uses it before leaving insert mode.
+func (m *Model) ClosePicker() bool {
+	if !m.IsPickerActive() {
+		return false
+	}
+	m.closePickers()
+	m.dirty()
+	return true
+}
+
+// PickerView returns whichever completion dropdown is open, or "".
+func (m Model) PickerView(width int) string {
+	for _, v := range []string{m.EmojiPickerView(width), m.MentionPickerView(width), m.ChannelPickerView(width), m.CommandPickerView(width)} {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }

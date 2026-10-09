@@ -12,7 +12,8 @@ slk is intentionally not a 1:1 port of the desktop client. Some Slack features a
 ## Not planned
 
 - Joining or starting huddles (slk only shows who is in one), Slack Connect, Workflow Builder
-- Bot/app management, slash commands, custom emoji management
+- Bot/app management, custom emoji management
+- Slash commands that answer with interactive buttons or open a form (modal): the command runs, but slk cannot show the form
 - Animated reactions, link unfurls, in-app toasts
 
 ## Markdown caveats

@@ -12,6 +12,7 @@
 | `Esc` | Insert / Command | Return to normal mode |
 | `Enter` | Insert | Send message |
 | `Shift+Enter` | Insert | Newline |
+| `/` | Insert (start of message) | Slash command picker: `Tab`/`Enter` completes the name, `Enter` on the full line runs it. An unknown command is refused and the draft stays; start with a space to send `/...` as text. Responses only you see are marked "only visible to you" and vanish on reload |
 | `Ctrl+V` | Insert | Smart paste — image / file path / text (use `Ctrl+V`, not the terminal's `Ctrl+Shift+V`) |
 | `Ctrl+U` | Insert | Clear compose (text + pending attachments) |
 | `Ctrl+E` | Insert | Edit the draft in `$VISUAL` / `$EDITOR` (or `compose.editor`) |

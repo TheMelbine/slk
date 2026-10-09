@@ -25,6 +25,7 @@ import (
 	"github.com/gammons/slk/internal/ui/activityview"
 	"github.com/gammons/slk/internal/ui/channelfinder"
 	"github.com/gammons/slk/internal/ui/channelpicker"
+	"github.com/gammons/slk/internal/ui/commandpicker"
 	"github.com/gammons/slk/internal/ui/compose"
 	"github.com/gammons/slk/internal/ui/confirmprompt"
 	"github.com/gammons/slk/internal/ui/emojipicker"
@@ -478,6 +479,9 @@ type App struct {
 	// from WorkspaceReadyMsg / WorkspaceSwitchedMsg. Read by the link
 	// router to match permalink hosts against the active workspace.
 	workspaceDomains map[string]string
+	// slashCommands holds each workspace's slash commands; the active
+	// workspace's set feeds both composers' "/" pickers.
+	slashCommands map[string][]commandpicker.Command
 
 	// pendingLinkNav tracks an in-flight permalink navigation: the
 	// channel was (or is being) opened and the message-select /
@@ -829,6 +833,7 @@ func NewApp() *App {
 		searchSvc:             noopSearchService,
 		lastChannelByTeam:     map[string]string{},
 		workspaceDomains:      map[string]string{},
+		slashCommands:         map[string][]commandpicker.Command{},
 		desktop:               noopDesktopService,
 		editor:                noopEditorService,
 		navHistory:            newNavHistoryStore(),
@@ -977,6 +982,7 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		reduceSend,
 		reduceChannels,
 		reduceLinks,
+		reduceSlash,
 		reduceFiles,
 		reduceSearch,
 		reduceWorkspace,

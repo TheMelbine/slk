@@ -2261,6 +2261,7 @@ func (m *Model) renderMessagePlain(msg MessageItem, width int, avatarStr string,
 	if msg.IsEdited {
 		editedMark = " " + styles.Timestamp.Render("(edited)")
 	}
+	editedMark += EphemeralMark(msg)
 
 	// Pre-attachment row count, so attachment rows can compute their
 	// absolute row index (used as the sixelRows key).

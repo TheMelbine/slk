@@ -16,6 +16,7 @@ type dndChangeRecord struct {
 }
 
 type mockEventHandler struct {
+	ephemeral           []string
 	messages            []string
 	subtypes            []string
 	deletedMessages     []string
@@ -100,6 +101,10 @@ func (m *mockEventHandler) OnMessage(channelID, userID, ts, text, threadTS, subt
 	m.lastUserID = userID
 	m.lastBotID = botID
 	m.lastUsername = username
+}
+
+func (m *mockEventHandler) OnEphemeralMessage(channelID, userID, ts, text, threadTS string, blocks slack.Blocks, attachments []slack.Attachment, botID, username string) {
+	m.ephemeral = append(m.ephemeral, text)
 }
 
 func (m *mockEventHandler) OnMessageDeleted(channelID, ts string) {
@@ -201,6 +206,18 @@ func TestDispatchWebSocketMessageEvent(t *testing.T) {
 	}
 	if handler.messages[0] != "hello world" {
 		t.Errorf("expected 'hello world', got %q", handler.messages[0])
+	}
+}
+
+func TestDispatchWebSocketEphemeralMessage(t *testing.T) {
+	handler := &mockEventHandler{}
+	data := []byte(`{"type":"message","subtype":"bot_message","channel":"D1","text":"Need some help?","user":"USLACKBOT","bot_id":"B01","ts":"1.0","is_ephemeral":true}`)
+	dispatchWebSocketEvent(data, handler)
+	if len(handler.messages) != 0 {
+		t.Errorf("ephemeral message reached OnMessage: %v", handler.messages)
+	}
+	if len(handler.ephemeral) != 1 || handler.ephemeral[0] != "Need some help?" {
+		t.Errorf("ephemeral = %v", handler.ephemeral)
 	}
 }
 

@@ -256,6 +256,7 @@ type ChannelServiceFuncs struct {
 	OpenConversation func(userIDs []string, requestID uint64) Cmd
 	SearchRemote     func(query string) []ChannelFinderItem
 	ToggleStar       func(channelID ids.ChannelID) Msg
+	RunCommand       func(channelID ids.ChannelID, threadTS, command, text string) Msg
 	CycleNotifyLevel func(channelID ids.ChannelID) Msg
 }
 
@@ -323,6 +324,13 @@ func (c channelAdapter) Join(channelID ids.ChannelID, channelName string) Msg {
 		return nil
 	}
 	return c.fns.Join(channelID, channelName)
+}
+
+func (c channelAdapter) RunCommand(channelID ids.ChannelID, threadTS, command, text string) Msg {
+	if c.fns.RunCommand == nil {
+		return nil
+	}
+	return c.fns.RunCommand(channelID, threadTS, command, text)
 }
 
 func (c channelAdapter) ToggleStar(channelID ids.ChannelID) Msg {
