@@ -6,15 +6,27 @@ A fork of [slk](https://github.com/gammons/slk) by Grant Ammons with changes I w
 
 ![slk-plus demo: cycling a channel's notification level, starring it, following a thread, avatars in the mention picker](docs/assets/demo/plus.gif)
 
+**Notifications**
+
 - Per-channel notification levels from Slack are honored (all new messages / mentions only / nothing), and `m` cycles them without leaving the terminal
-- macOS notifications show the sender's avatar and a click returns to slk's Ghostty tab and opens that message (`macos/notifier/build.sh` installs the helper app)
 - `f` follows or unfollows a thread, with desktop notifications for replies in followed threads
+- macOS: notifications carry the app icon and the sender's avatar, and a click brings back slk's Ghostty tab and opens the message or its thread, switching workspace if needed. `macos/notifier/build.sh` builds and installs the helper app once
+
+**Channels and workspaces**
+
 - `s` stars or unstars a channel
+- Workspace icons in the rail instead of initials; the rail is hidden when there is only one workspace
+
+**Keys**
+
+- Hotkeys work on a Cyrillic keyboard layout, including the `?` cheatsheet and `:` commands (`:й` is `:q`); pickers and the command line accept non-ASCII input
+- `:q` closes the focused window and quits in the last one, `:qa` quits
+
+**Rendering**
+
 - Avatars in the thread panel, on the thread line (participants + "last reply N ago") and in the `@` mention picker
-- Hotkeys work on a Cyrillic keyboard layout, and pickers and the command line accept non-ASCII input
 - Emoji and links render inside alert attachments
 - Theme color `"none"` for a transparent background, author name colors in themes
-- Workspace icons in the rail instead of initials, rail hidden with a single workspace
 - Kitty graphics fixes for Ghostty
 
 Build from source: `go build -o bin/slk ./cmd/slk`. Keybindings: [wiki/Keybindings.md](wiki/Keybindings.md). The clip above is `slk --demo plus` recorded with `vhs docs/assets/demo/plus.tape`.
