@@ -112,10 +112,13 @@ func (m *Model) View(width int) string {
 	if !m.visible || len(m.filtered) == 0 {
 		return ""
 	}
-	inner := width - 2
+	// The box is width-2 wide including its border, so a row gets
+	// width-4 columns. Rows are cut to that, never wrapped.
+	inner := width - 4
 	if inner < 10 {
 		inner = 10
 	}
+	muted := styles.Timestamp
 	var rows []string
 	for i, c := range m.filtered {
 		indicator := "  "
@@ -124,9 +127,11 @@ func (m *Model) View(width int) string {
 			indicator = lipgloss.NewStyle().Foreground(styles.Accent).Render("▌ ")
 			nameStyle = nameStyle.Bold(true)
 		}
-		label := c.Name
+		// The name stands apart from its usage hint: apps put whole
+		// sentences there, which read as part of the command otherwise.
+		row := indicator + nameStyle.Render(c.Name)
 		if c.Usage != "" {
-			label += " " + c.Usage
+			row += " " + muted.Render(c.Usage)
 		}
 		detail := c.Desc
 		if c.AppName != "" {
@@ -136,9 +141,8 @@ func (m *Model) View(width int) string {
 				detail = c.AppName
 			}
 		}
-		row := indicator + nameStyle.Render(label)
 		if detail != "" {
-			row += "  " + styles.Timestamp.Render(detail)
+			row += muted.Render("  — " + detail)
 		}
 		rows = append(rows, ansi.Truncate(row, inner, "…"))
 	}

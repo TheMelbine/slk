@@ -63,9 +63,25 @@ func TestView_ShowsUsageAndApp(t *testing.T) {
 	m.SetCommands(cmds)
 	m.Open()
 	out := ansi.Strip(m.View(80))
-	for _, want := range []string{"/remind [what] [when]", "Set a reminder", "GitHub · Work with GitHub"} {
+	for _, want := range []string{"/remind [what] [when]", "— Set a reminder", "— GitHub · Work with GitHub"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("view lacks %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestView_LongRowsStayOnOneLine(t *testing.T) {
+	m := New()
+	m.SetCommands([]Command{{Name: "/bucket", Usage: strings.Repeat("sub 21 — subscription ", 10), AppName: "Buckets", Desc: strings.Repeat("long ", 30)}})
+	m.Open()
+	out := m.View(60)
+	lines := strings.Split(out, "\n")
+	if len(lines) != 3 { // top border, one row, bottom border
+		t.Fatalf("view is %d lines, want 3:\n%s", len(lines), ansi.Strip(out))
+	}
+	for _, l := range lines {
+		if w := ansi.StringWidth(l); w > 58 {
+			t.Errorf("line %d wide, box is 58: %q", w, ansi.Strip(l))
 		}
 	}
 }
